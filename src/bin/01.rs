@@ -60,10 +60,10 @@ impl FromStr for LocationList {
             let mut r: Result<u32, ParseLocationListError> = Err(ParseLocationListError);
 
             for (ix, part) in line.split_whitespace().enumerate() {
-                let value = part.parse::<u32>().map_err(|_| ParseLocationListError)?;
+                let value = part.parse::<u32>().map_err(|_| ParseLocationListError);
                 match ix {
-                    0 => l = Ok(value),
-                    1 => r = Ok(value),
+                    0 => l = value,
+                    1 => r = value,
                     _ => return Err(ParseLocationListError),
                 }
             }
