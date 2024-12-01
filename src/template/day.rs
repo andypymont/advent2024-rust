@@ -81,21 +81,21 @@ impl PartialOrd<u8> for Day {
 /* -------------------------------------------------------------------------- */
 
 impl FromStr for Day {
-    type Err = DayFromStrError;
+    type Err = FromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let day = s.parse().map_err(|_| DayFromStrError)?;
-        Self::new(day).ok_or(DayFromStrError)
+        let day = s.parse().map_err(|_| FromStrError)?;
+        Self::new(day).ok_or(FromStrError)
     }
 }
 
 /// An error which can be returned when parsing a [`Day`].
 #[derive(Debug)]
-pub struct DayFromStrError;
+pub struct FromStrError;
 
-impl Error for DayFromStrError {}
+impl Error for FromStrError {}
 
-impl Display for DayFromStrError {
+impl Display for FromStrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("expecting a day number between 1 and 25")
     }
