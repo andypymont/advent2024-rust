@@ -30,8 +30,7 @@ impl LocationList {
         let mut counts = BTreeMap::new();
 
         for item in &self.right {
-            let count = 1 + counts.get(item).unwrap_or(&0);
-            counts.insert(*item, count);
+            counts.entry(*item).and_modify(|c| *c += 1).or_insert(1);
         }
 
         counts
