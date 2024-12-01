@@ -4,6 +4,9 @@ use crate::template::run_multi::run_multi;
 use crate::template::timings::Timings;
 use crate::template::{all_days, readme_benchmarks, Day};
 
+/// # Panics
+///
+/// Will panic if there is an error when trying to write a timings file to disc.
 pub fn handle(day: Option<Day>, run_all: bool, store: bool) {
     let stored_timings = Timings::read_from_file();
 
@@ -21,7 +24,7 @@ pub fn handle(day: Option<Day>, run_all: bool, store: bool) {
         |day| HashSet::from([day]),
     );
 
-    let timings = run_multi(&days_to_run, true, true).unwrap();
+    let timings = run_multi(&days_to_run, true, true).unwrap_or_default();
 
     if store {
         let merged_timings = stored_timings.merge(&timings);
