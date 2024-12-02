@@ -7,53 +7,46 @@ advent_of_code::solution!(2);
 struct LevelReportLine(Vec<u8>);
 
 impl LevelReportLine {
-    fn changes(&self) -> impl Iterator<Item = (Ordering, u8)> + '_ {
-        self.0.windows(2).map(|window| {
-            let Some(first) = window.first() else {
-                return (Ordering::Equal, 0);
-            };
-            let Some(second) = window.get(1) else {
-                return (Ordering::Equal, 0);
-            };
-            (second.cmp(first), first.abs_diff(*second))
-        })
-    }
+    fn is_safe(&self, skip: Option<usize>) -> bool {
+        let mut direction: Option<Ordering> = None;
 
-    fn is_safe(&self) -> bool {
-        let mut changes = self.changes();
-        let Some((direction, mut max)) = changes.next() else {
-            return false;
-        };
-        if direction == Ordering::Equal || max > 3 {
-            return false;
-        }
-        for (cmp, diff) in changes {
+        for (ix, value) in self.0.iter().enumerate() {
+            let offset = if skip == Some(ix) {
+                continue;
+            } else if skip == Some(ix + 1) {
+                2
+            } else {
+                1
+            };
+            let Some(next) = self.0.get(ix + offset) else {
+                break;
+            };
+
+            if value.abs_diff(*next) > 3 {
+                return false;
+            }
+
+            let cmp = next.cmp(&value);
             if cmp == Ordering::Equal {
                 return false;
             }
-            if cmp != direction {
-                return false;
+            if let Some(dir) = direction {
+                if cmp != dir {
+                    return false;
+                }
             }
-            max = max.max(diff);
-            if max > 3 {
-                return false;
-            }
+            direction = Some(cmp);
         }
 
         true
     }
 
+    fn is_safe_default(&self) -> bool {
+        self.is_safe(None)
+    }
+
     fn is_safe_tolerating(&self) -> bool {
-        (0..self.0.len()).any(|ix| {
-            let except = Self(
-                self.0
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(pos, item)| if pos == ix { None } else { Some(*item) })
-                    .collect(),
-            );
-            except.is_safe()
-        })
+        (0..self.0.len()).any(|ix| self.is_safe(Some(ix)))
     }
 }
 
@@ -100,7 +93,13 @@ pub fn part_one(input: &str) -> Option<usize> {
     let Ok(report) = input.parse::<LevelReport>() else {
         return None;
     };
-    Some(report.lines.iter().filter(|line| line.is_safe()).count())
+    Some(
+        report
+            .lines
+            .iter()
+            .filter(|line| line.is_safe_default())
+            .count(),
+    )
 }
 
 #[must_use]
@@ -135,61 +134,14 @@ mod tests {
     }
 
     #[test]
-    fn test_report_changes() {
+    fn test_is_safe_default() {
         let report = example_report();
-
-        let mut changes = report.lines[0].changes();
-        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
-        assert_eq!(changes.next(), None);
-
-        changes = report.lines[1].changes();
-        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 5)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
-        assert_eq!(changes.next(), None);
-
-        changes = report.lines[2].changes();
-        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 4)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
-        assert_eq!(changes.next(), None);
-
-        changes = report.lines[3].changes();
-        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
-        assert_eq!(changes.next(), None);
-
-        changes = report.lines[4].changes();
-        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Equal, 0)));
-        assert_eq!(changes.next(), Some((Ordering::Less, 3)));
-        assert_eq!(changes.next(), None);
-
-        changes = report.lines[5].changes();
-        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 3)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
-        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
-        assert_eq!(changes.next(), None);
-    }
-
-    #[test]
-    fn test_is_safe() {
-        let report = example_report();
-        assert_eq!(report.lines[0].is_safe(), true);
-        assert_eq!(report.lines[1].is_safe(), false);
-        assert_eq!(report.lines[2].is_safe(), false);
-        assert_eq!(report.lines[3].is_safe(), false);
-        assert_eq!(report.lines[4].is_safe(), false);
-        assert_eq!(report.lines[5].is_safe(), true);
+        assert_eq!(report.lines[0].is_safe_default(), true);
+        assert_eq!(report.lines[1].is_safe_default(), false);
+        assert_eq!(report.lines[2].is_safe_default(), false);
+        assert_eq!(report.lines[3].is_safe_default(), false);
+        assert_eq!(report.lines[4].is_safe_default(), false);
+        assert_eq!(report.lines[5].is_safe_default(), true);
     }
 
     #[test]
