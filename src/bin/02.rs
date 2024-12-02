@@ -24,6 +24,9 @@ impl LevelReportLine {
         let Some((direction, mut max)) = changes.next() else {
             return false;
         };
+        if direction == Ordering::Equal || max > 3 {
+            return false;
+        }
         for (cmp, diff) in changes {
             if cmp == Ordering::Equal {
                 return false;
