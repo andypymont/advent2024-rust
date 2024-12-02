@@ -1,81 +1,59 @@
 use std::cmp::Ordering;
-use std::ops::Add;
 use std::str::FromStr;
 
 advent_of_code::solution!(2);
 
 #[derive(Debug, PartialEq)]
-enum Slope {
-    Increasing,
-    Decreasing,
-    Undulating,
-}
+struct LevelReportLine(Vec<u8>);
 
-impl Add<Ordering> for Slope {
-    type Output = Self;
+impl LevelReportLine {
+    fn changes(&self) -> impl Iterator<Item = (Ordering, u8)> + '_ {
+        self.0.windows(2).map(|window| {
+            let Some(first) = window.first() else {
+                return (Ordering::Equal, 0);
+            };
+            let Some(second) = window.get(1) else {
+                return (Ordering::Equal, 0);
+            };
+            (second.cmp(first), first.abs_diff(*second))
+        })
+    }
 
-    fn add(self, rhs: Ordering) -> Self::Output {
-        match (self, rhs) {
-            (Slope::Increasing, Ordering::Greater) => Slope::Increasing,
-            (Slope::Decreasing, Ordering::Less) => Slope::Decreasing,
-            _ => Slope::Undulating,
+    fn is_safe(&self) -> bool {
+        let mut changes = self.changes();
+        let Some((direction, mut max)) = changes.next() else {
+            return false;
+        };
+        for (cmp, diff) in changes {
+            if cmp == Ordering::Equal {
+                return false;
+            }
+            if cmp != direction {
+                return false;
+            }
+            max = max.max(diff);
         }
+
+        max <= 3
+    }
+
+    fn is_safe_tolerating(&self) -> bool {
+        (0..self.0.len()).any(|ix| {
+            let except = Self(
+                self.0
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(pos, item)| if pos == ix { None } else { Some(*item) })
+                    .collect(),
+            );
+            except.is_safe()
+        })
     }
 }
-
-#[derive(Debug, PartialEq)]
-struct LevelReportSummary {
-    slope: Slope,
-    max: u8,
-}
-
-#[derive(Debug, PartialEq)]
-struct LevelReportLine(Vec<u8>);
 
 #[derive(Debug, PartialEq)]
 struct LevelReport {
     lines: Vec<LevelReportLine>,
-}
-
-impl LevelReportSummary {
-    fn is_safe(&self) -> bool {
-        !(self.slope == Slope::Undulating || self.max > 3)
-    }
-}
-
-impl LevelReportLine {
-    fn summary(&self) -> LevelReportSummary {
-        let mut items = self.0.iter();
-
-        let Some(mut prev) = items.next() else {
-            return LevelReportSummary {
-                slope: Slope::Undulating,
-                max: 0,
-            };
-        };
-
-        let mut max = 0;
-        let mut slope: Option<Slope> = None;
-
-        for item in items {
-            let cmp = item.cmp(prev);
-            slope = match slope {
-                Some(existing_slope) => Some(existing_slope + cmp),
-                None => match cmp {
-                    Ordering::Greater => Some(Slope::Increasing),
-                    Ordering::Equal => Some(Slope::Undulating),
-                    Ordering::Less => Some(Slope::Decreasing),
-                },
-            };
-            max = max.max(item.abs_diff(*prev));
-            prev = item;
-        }
-
-        LevelReportSummary {
-            slope: slope.unwrap_or(Slope::Undulating),
-            max,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -116,18 +94,21 @@ pub fn part_one(input: &str) -> Option<usize> {
     let Ok(report) = input.parse::<LevelReport>() else {
         return None;
     };
+    Some(report.lines.iter().filter(|line| line.is_safe()).count())
+}
+
+#[must_use]
+pub fn part_two(input: &str) -> Option<usize> {
+    let Ok(report) = input.parse::<LevelReport>() else {
+        return None;
+    };
     Some(
         report
             .lines
             .iter()
-            .filter(|line| line.summary().is_safe())
+            .filter(|line| line.is_safe_tolerating())
             .count(),
     )
-}
-
-#[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
 }
 
 #[cfg(test)]
@@ -148,50 +129,61 @@ mod tests {
     }
 
     #[test]
-    fn test_report_summary() {
+    fn test_report_changes() {
         let report = example_report();
-        assert_eq!(
-            report.lines[0].summary(),
-            LevelReportSummary {
-                slope: Slope::Decreasing,
-                max: 2
-            },
-        );
-        assert_eq!(
-            report.lines[1].summary(),
-            LevelReportSummary {
-                slope: Slope::Increasing,
-                max: 5
-            },
-        );
-        assert_eq!(
-            report.lines[2].summary(),
-            LevelReportSummary {
-                slope: Slope::Decreasing,
-                max: 4
-            },
-        );
-        assert_eq!(
-            report.lines[3].summary(),
-            LevelReportSummary {
-                slope: Slope::Undulating,
-                max: 2
-            },
-        );
-        assert_eq!(
-            report.lines[4].summary(),
-            LevelReportSummary {
-                slope: Slope::Undulating,
-                max: 3
-            },
-        );
-        assert_eq!(
-            report.lines[5].summary(),
-            LevelReportSummary {
-                slope: Slope::Increasing,
-                max: 3
-            },
-        );
+
+        let mut changes = report.lines[0].changes();
+        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
+        assert_eq!(changes.next(), None);
+
+        changes = report.lines[1].changes();
+        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 5)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
+        assert_eq!(changes.next(), None);
+
+        changes = report.lines[2].changes();
+        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 4)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
+        assert_eq!(changes.next(), None);
+
+        changes = report.lines[3].changes();
+        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 1)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
+        assert_eq!(changes.next(), None);
+
+        changes = report.lines[4].changes();
+        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Equal, 0)));
+        assert_eq!(changes.next(), Some((Ordering::Less, 3)));
+        assert_eq!(changes.next(), None);
+
+        changes = report.lines[5].changes();
+        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 3)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 1)));
+        assert_eq!(changes.next(), Some((Ordering::Greater, 2)));
+        assert_eq!(changes.next(), None);
+    }
+
+    #[test]
+    fn test_is_safe() {
+        let report = example_report();
+        assert_eq!(report.lines[0].is_safe(), true);
+        assert_eq!(report.lines[1].is_safe(), false);
+        assert_eq!(report.lines[2].is_safe(), false);
+        assert_eq!(report.lines[3].is_safe(), false);
+        assert_eq!(report.lines[4].is_safe(), false);
+        assert_eq!(report.lines[5].is_safe(), true);
     }
 
     #[test]
@@ -209,8 +201,25 @@ mod tests {
     }
 
     #[test]
+    fn test_is_safe_tolerating() {
+        let report = example_report();
+        assert_eq!(report.lines[0].is_safe_tolerating(), true);
+        assert_eq!(report.lines[1].is_safe_tolerating(), false);
+        assert_eq!(report.lines[2].is_safe_tolerating(), false);
+        assert_eq!(report.lines[3].is_safe_tolerating(), true);
+        assert_eq!(report.lines[4].is_safe_tolerating(), true);
+        assert_eq!(report.lines[5].is_safe_tolerating(), true);
+    }
+
+    #[test]
+    fn test_is_safe_tolerating_becomes_flat() {
+        let becomes_flat = LevelReportLine(vec![2, 3, 2, 2]);
+        assert_eq!(becomes_flat.is_safe_tolerating(), false);
+    }
+
+    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(4));
     }
 }
