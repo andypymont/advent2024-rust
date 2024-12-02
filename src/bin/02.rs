@@ -32,9 +32,12 @@ impl LevelReportLine {
                 return false;
             }
             max = max.max(diff);
+            if max > 3 {
+                return false;
+            }
         }
 
-        max <= 3
+        true
     }
 
     fn is_safe_tolerating(&self) -> bool {
