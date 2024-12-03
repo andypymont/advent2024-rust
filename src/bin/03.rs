@@ -36,22 +36,6 @@ enum ParserActivity {
     Inactive,
 }
 
-impl ParserActivity {
-    fn activate(&self) -> Self {
-        match self {
-            Self::Ignore => Self::Ignore,
-            Self::Active | Self::Inactive => Self::Active,
-        }
-    }
-
-    fn deactivate(&self) -> Self {
-        match self {
-            Self::Ignore => Self::Ignore,
-            Self::Active | Self::Inactive => Self::Inactive,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 struct InputParser {
     active: ParserActivity,
@@ -76,6 +60,18 @@ impl InputParser {
             first_operand: Operand::new(),
             second_operand: Operand::new(),
             instructions: Vec::new(),
+        }
+    }
+
+    fn activate(&mut self) {
+        if self.active != ParserActivity::Ignore {
+            self.active = ParserActivity::Active;
+        }
+    }
+
+    fn deactivate(&mut self) {
+        if self.active != ParserActivity::Ignore {
+            self.active = ParserActivity::Inactive;
         }
     }
 
@@ -110,9 +106,9 @@ impl InputParser {
         ];
 
         if self.buffer == ['d', 'o', 'n', '\'', 't', '(', ')'] {
-            self.active = self.active.deactivate();
+            self.deactivate();
         } else if self.buffer[3..7] == ['d', 'o', '(', ')'] {
-            self.active = self.active.activate();
+            self.activate();
         }
 
         match self.state {
@@ -238,30 +234,6 @@ mod tests {
     fn test_part_one() {
         let result = part_one(&advent_of_code::template::read_file("examples", DAY));
         assert_eq!(result, Some(161));
-    }
-
-    #[test]
-    fn test_activate() {
-        let active = ParserActivity::Active;
-        assert_eq!(active.activate(), ParserActivity::Active);
-
-        let active = ParserActivity::Inactive;
-        assert_eq!(active.activate(), ParserActivity::Active);
-
-        let active = ParserActivity::Ignore;
-        assert_eq!(active.activate(), ParserActivity::Ignore);
-    }
-
-    #[test]
-    fn test_deactivate() {
-        let active = ParserActivity::Active;
-        assert_eq!(active.deactivate(), ParserActivity::Inactive);
-
-        let active = ParserActivity::Inactive;
-        assert_eq!(active.deactivate(), ParserActivity::Inactive);
-
-        let active = ParserActivity::Ignore;
-        assert_eq!(active.deactivate(), ParserActivity::Ignore);
     }
 
     #[test]
