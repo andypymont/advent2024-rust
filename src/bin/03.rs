@@ -77,16 +77,6 @@ impl InputParser {
         self.state = ParserState::Blank;
     }
 
-    fn record_and_clear(&mut self) {
-        if self.active == ParserActivity::Inactive {
-            return self.clear();
-        }
-        if let ParserState::SecondOperand(first, Some(second)) = self.state {
-            self.total += first * second;
-        }
-        self.clear();
-    }
-
     fn read_char(&mut self, input: char) {
         self.buffer = [
             self.buffer[1],
@@ -123,15 +113,16 @@ impl InputParser {
                     self.clear();
                 }
             }
-            ParserState::SecondOperand(_first, second) => {
+            ParserState::SecondOperand(first, second) => {
                 if let Some(digit) = input.to_digit(10) {
                     self.state += digit;
                 } else if input == ')' {
-                    if second.is_some() {
-                        self.record_and_clear();
-                    } else {
-                        self.clear();
-                    }
+                    let value = match (&self.active, second) {
+                        (ParserActivity::Inactive, _) | (_, None) => 0,
+                        (_, Some(s)) => first * s,
+                    };
+                    self.total += value;
+                    self.clear();
                 } else {
                     self.clear();
                 }
