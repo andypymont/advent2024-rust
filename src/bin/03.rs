@@ -1,32 +1,34 @@
+use std::ops::{Add, AddAssign};
+
 advent_of_code::solution!(3);
 
-#[derive(Debug, PartialEq)]
-struct Operand {
-    value: Option<u32>,
-}
-
-impl Operand {
-    fn new() -> Self {
-        Self { value: None }
-    }
-
-    fn add(&mut self, digit: u32) {
-        self.value = Some(match self.value {
-            None => digit,
-            Some(existing) => (10 * existing) + digit,
-        });
-    }
-
-    fn clear(&mut self) {
-        self.value = None;
-    }
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum ParserState {
     Blank,
-    FirstOperand,
-    SecondOperand,
+    FirstOperand(Option<u32>),
+    SecondOperand(u32, Option<u32>),
+}
+
+impl Add<u32> for ParserState {
+    type Output = Self;
+
+    fn add(self, rhs: u32) -> Self::Output {
+        match self {
+            Self::Blank => Self::Blank,
+            Self::FirstOperand(None) => Self::FirstOperand(Some(rhs)),
+            Self::FirstOperand(Some(existing)) => Self::FirstOperand(Some((existing * 10) + rhs)),
+            Self::SecondOperand(first, None) => Self::SecondOperand(first, Some(rhs)),
+            Self::SecondOperand(first, Some(existing)) => {
+                Self::SecondOperand(first, Some((existing * 10) + rhs))
+            }
+        }
+    }
+}
+
+impl AddAssign<u32> for ParserState {
+    fn add_assign(&mut self, rhs: u32) {
+        *self = *self + rhs;
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -41,8 +43,6 @@ struct InputParser {
     active: ParserActivity,
     state: ParserState,
     buffer: [char; 7],
-    first_operand: Operand,
-    second_operand: Operand,
     instructions: Vec<(u32, u32)>,
 }
 
@@ -57,8 +57,6 @@ impl InputParser {
             active,
             state: ParserState::Blank,
             buffer: [' ', ' ', ' ', ' ', ' ', ' ', ' '],
-            first_operand: Operand::new(),
-            second_operand: Operand::new(),
             instructions: Vec::new(),
         }
     }
@@ -77,18 +75,13 @@ impl InputParser {
 
     fn clear(&mut self) {
         self.state = ParserState::Blank;
-        self.first_operand.clear();
-        self.second_operand.clear();
     }
 
     fn record_and_clear(&mut self) {
-        let Some(first) = self.first_operand.value else {
+        if self.active == ParserActivity::Inactive {
             return self.clear();
-        };
-        let Some(second) = self.second_operand.value else {
-            return self.clear();
-        };
-        if self.active != ParserActivity::Inactive {
+        }
+        if let ParserState::SecondOperand(first, Some(second)) = self.state {
             self.instructions.push((first, second));
         }
         self.clear();
@@ -114,15 +107,15 @@ impl InputParser {
         match self.state {
             ParserState::Blank => {
                 if self.buffer[3..7] == ['m', 'u', 'l', '('] {
-                    self.state = ParserState::FirstOperand;
+                    self.state = ParserState::FirstOperand(None);
                 }
             }
-            ParserState::FirstOperand => {
+            ParserState::FirstOperand(first) => {
                 if let Some(digit) = input.to_digit(10) {
-                    self.first_operand.add(digit);
+                    self.state += digit;
                 } else if input == ',' {
-                    if self.first_operand.value.is_some() {
-                        self.state = ParserState::SecondOperand;
+                    if let Some(f) = first {
+                        self.state = ParserState::SecondOperand(f, None);
                     } else {
                         self.clear();
                     }
@@ -130,11 +123,11 @@ impl InputParser {
                     self.clear();
                 }
             }
-            ParserState::SecondOperand => {
+            ParserState::SecondOperand(_first, second) => {
                 if let Some(digit) = input.to_digit(10) {
-                    self.second_operand.add(digit);
+                    self.state += digit;
                 } else if input == ')' {
-                    if self.second_operand.value.is_some() {
+                    if second.is_some() {
                         self.record_and_clear();
                     } else {
                         self.clear();
@@ -176,24 +169,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_operand_collection() {
-        let mut operand = Operand::new();
-        assert_eq!(operand.value, None);
-
-        operand.add(4);
-        assert_eq!(operand.value, Some(4));
-
-        operand.add(2);
-        assert_eq!(operand.value, Some(42));
-
-        operand.add(1);
-        assert_eq!(operand.value, Some(421));
-
-        operand.clear();
-        assert_eq!(operand.value, None);
-    }
-
-    #[test]
     fn test_parse_first_instruction() {
         let mut parser = InputParser::new(false);
         assert_eq!(parser.state, ParserState::Blank);
@@ -202,13 +177,13 @@ mod tests {
         parser.read_char('u');
         parser.read_char('l');
         parser.read_char('(');
-        assert_eq!(parser.state, ParserState::FirstOperand);
+        assert_eq!(parser.state, ParserState::FirstOperand(None));
         parser.read_char('2');
-        assert_eq!(parser.state, ParserState::FirstOperand);
+        assert_eq!(parser.state, ParserState::FirstOperand(Some(2)));
         parser.read_char(',');
-        assert_eq!(parser.state, ParserState::SecondOperand);
+        assert_eq!(parser.state, ParserState::SecondOperand(2, None));
         parser.read_char('4');
-        assert_eq!(parser.state, ParserState::SecondOperand);
+        assert_eq!(parser.state, ParserState::SecondOperand(2, Some(4)));
         parser.read_char(')');
         assert_eq!(parser.state, ParserState::Blank);
         assert_eq!(parser.instructions.get(0), Some((2, 4)).as_ref());
@@ -220,8 +195,6 @@ mod tests {
             active: ParserActivity::Ignore,
             state: ParserState::Blank,
             buffer: ['l', '(', '8', ',', '5', ')', ')'],
-            first_operand: Operand { value: None },
-            second_operand: Operand { value: None },
             instructions: vec![(2, 4), (5, 5), (11, 8), (8, 5)],
         };
 
@@ -254,8 +227,6 @@ mod tests {
             active: ParserActivity::Active,
             state: ParserState::Blank,
             buffer: ['l', '(', '8', ',', '5', ')', ')'],
-            first_operand: Operand { value: None },
-            second_operand: Operand { value: None },
             instructions: vec![(2, 4), (8, 5)],
         };
 
