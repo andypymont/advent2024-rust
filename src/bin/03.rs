@@ -50,24 +50,24 @@ impl InputParser {
                     ParserState::Blank
                 }
             }
-            ParserState::FirstOperand(first) => match (input.to_digit(10), first, input == ',') {
-                (Some(digit), None, _) => ParserState::FirstOperand(Some(digit)),
-                (Some(digit), Some(f), _) => ParserState::FirstOperand(Some((f * 10) + digit)),
-                (None, Some(f), true) => ParserState::SecondOperand(f, None),
+            ParserState::FirstOperand(first) => match (input, input.to_digit(10), first) {
+                (_, Some(digit), None) => ParserState::FirstOperand(Some(digit)),
+                (_, Some(digit), Some(f)) => ParserState::FirstOperand(Some((f * 10) + digit)),
+                (',', None, Some(f)) => ParserState::SecondOperand(f, None),
                 _ => ParserState::Blank,
             },
             ParserState::SecondOperand(first, second) => {
                 match (
+                    input,
                     input.to_digit(10),
                     second,
-                    input == ')',
                     self.active.unwrap_or(true),
                 ) {
-                    (Some(digit), None, _, _) => ParserState::SecondOperand(first, Some(digit)),
-                    (Some(digit), Some(s), _, _) => {
+                    (_, Some(digit), None, _) => ParserState::SecondOperand(first, Some(digit)),
+                    (_, Some(digit), Some(s), _) => {
                         ParserState::SecondOperand(first, Some((s * 10) + digit))
                     }
-                    (None, Some(s), true, true) => {
+                    (')', None, Some(s), true) => {
                         self.total += first * s;
                         ParserState::Blank
                     }
