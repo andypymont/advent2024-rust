@@ -26,7 +26,7 @@ impl LevelReportLine {
                 return false;
             }
 
-            let cmp = next.cmp(&value);
+            let cmp = next.cmp(value);
             if cmp == Ordering::Equal {
                 return false;
             }
