@@ -43,7 +43,7 @@ struct InputParser {
     active: ParserActivity,
     state: ParserState,
     buffer: [char; 7],
-    instructions: Vec<(u32, u32)>,
+    total: u32,
 }
 
 impl InputParser {
@@ -57,7 +57,7 @@ impl InputParser {
             active,
             state: ParserState::Blank,
             buffer: [' ', ' ', ' ', ' ', ' ', ' ', ' '],
-            instructions: Vec::new(),
+            total: 0,
         }
     }
 
@@ -82,7 +82,7 @@ impl InputParser {
             return self.clear();
         }
         if let ParserState::SecondOperand(first, Some(second)) = self.state {
-            self.instructions.push((first, second));
+            self.total += first * second;
         }
         self.clear();
     }
@@ -144,24 +144,20 @@ impl InputParser {
             self.read_char(ch);
         }
     }
-
-    fn total_value(&self) -> u32 {
-        self.instructions.iter().map(|(a, b)| a * b).sum()
-    }
 }
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
     let mut parser = InputParser::new(false);
     parser.read_input(input);
-    Some(parser.total_value())
+    Some(parser.total)
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
     let mut parser = InputParser::new(true);
     parser.read_input(input);
-    Some(parser.total_value())
+    Some(parser.total)
 }
 
 #[cfg(test)]
@@ -172,6 +168,7 @@ mod tests {
     fn test_parse_first_instruction() {
         let mut parser = InputParser::new(false);
         assert_eq!(parser.state, ParserState::Blank);
+        assert_eq!(parser.total, 0);
 
         parser.read_char('m');
         parser.read_char('u');
@@ -186,7 +183,7 @@ mod tests {
         assert_eq!(parser.state, ParserState::SecondOperand(2, Some(4)));
         parser.read_char(')');
         assert_eq!(parser.state, ParserState::Blank);
-        assert_eq!(parser.instructions.get(0), Some((2, 4)).as_ref());
+        assert_eq!(parser.total, 8);
     }
 
     #[test]
@@ -195,7 +192,7 @@ mod tests {
             active: ParserActivity::Ignore,
             state: ParserState::Blank,
             buffer: ['l', '(', '8', ',', '5', ')', ')'],
-            instructions: vec![(2, 4), (5, 5), (11, 8), (8, 5)],
+            total: 161,
         };
 
         let mut parser = InputParser::new(false);
@@ -227,7 +224,7 @@ mod tests {
             active: ParserActivity::Active,
             state: ParserState::Blank,
             buffer: ['l', '(', '8', ',', '5', ')', ')'],
-            instructions: vec![(2, 4), (8, 5)],
+            total: 48,
         };
 
         let mut parser = InputParser::new(true);
