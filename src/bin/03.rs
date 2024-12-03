@@ -25,14 +25,6 @@ impl InputParser {
         }
     }
 
-    fn activate(&mut self) {
-        self.active = self.active.map(|_| true);
-    }
-
-    fn deactivate(&mut self) {
-        self.active = self.active.map(|_| false);
-    }
-
     fn read_char(&mut self, input: char) {
         self.buffer = [
             self.buffer[1],
@@ -45,9 +37,9 @@ impl InputParser {
         ];
 
         if self.buffer == ['d', 'o', 'n', '\'', 't', '(', ')'] {
-            self.deactivate();
+            self.active = self.active.map(|_| false);
         } else if self.buffer[3..7] == ['d', 'o', '(', ')'] {
-            self.activate();
+            self.active = self.active.map(|_| true);
         }
 
         self.state = match self.state {
