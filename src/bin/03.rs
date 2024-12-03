@@ -1,5 +1,3 @@
-use std::ops::{Add, AddAssign};
-
 advent_of_code::solution!(3);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -7,28 +5,6 @@ enum ParserState {
     Blank,
     FirstOperand(Option<u32>),
     SecondOperand(u32, Option<u32>),
-}
-
-impl Add<u32> for ParserState {
-    type Output = Self;
-
-    fn add(self, rhs: u32) -> Self::Output {
-        match self {
-            Self::Blank => Self::Blank,
-            Self::FirstOperand(None) => Self::FirstOperand(Some(rhs)),
-            Self::FirstOperand(Some(existing)) => Self::FirstOperand(Some((existing * 10) + rhs)),
-            Self::SecondOperand(first, None) => Self::SecondOperand(first, Some(rhs)),
-            Self::SecondOperand(first, Some(existing)) => {
-                Self::SecondOperand(first, Some((existing * 10) + rhs))
-            }
-        }
-    }
-}
-
-impl AddAssign<u32> for ParserState {
-    fn add_assign(&mut self, rhs: u32) {
-        *self = *self + rhs;
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -73,10 +49,6 @@ impl InputParser {
         }
     }
 
-    fn clear(&mut self) {
-        self.state = ParserState::Blank;
-    }
-
     fn read_char(&mut self, input: char) {
         self.buffer = [
             self.buffer[1],
@@ -94,37 +66,32 @@ impl InputParser {
             self.activate();
         }
 
-        match self.state {
+        self.state = match self.state {
             ParserState::Blank => {
                 if self.buffer[3..7] == ['m', 'u', 'l', '('] {
-                    self.state = ParserState::FirstOperand(None);
-                }
-            }
-            ParserState::FirstOperand(first) => {
-                if let Some(digit) = input.to_digit(10) {
-                    self.state += digit;
-                } else if input == ',' {
-                    if let Some(f) = first {
-                        self.state = ParserState::SecondOperand(f, None);
-                    } else {
-                        self.clear();
-                    }
+                    ParserState::FirstOperand(None)
                 } else {
-                    self.clear();
+                    ParserState::Blank
                 }
             }
+            ParserState::FirstOperand(first) => match (input.to_digit(10), first, input == ',') {
+                (Some(digit), None, _) => ParserState::FirstOperand(Some(digit)),
+                (Some(digit), Some(f), _) => ParserState::FirstOperand(Some((f * 10) + digit)),
+                (None, Some(f), true) => ParserState::SecondOperand(f, None),
+                _ => ParserState::Blank,
+            },
             ParserState::SecondOperand(first, second) => {
-                if let Some(digit) = input.to_digit(10) {
-                    self.state += digit;
-                } else if input == ')' {
-                    let value = match (&self.active, second) {
-                        (ParserActivity::Inactive, _) | (_, None) => 0,
-                        (_, Some(s)) => first * s,
-                    };
-                    self.total += value;
-                    self.clear();
-                } else {
-                    self.clear();
+                match (input.to_digit(10), second, input == ')', &self.active) {
+                    (Some(digit), None, _, _) => ParserState::SecondOperand(first, Some(digit)),
+                    (Some(digit), Some(s), _, _) => {
+                        ParserState::SecondOperand(first, Some((s * 10) + digit))
+                    }
+                    (None, _, true, ParserActivity::Inactive) => ParserState::Blank,
+                    (None, Some(s), true, _) => {
+                        self.total += first * s;
+                        ParserState::Blank
+                    }
+                    _ => ParserState::Blank,
                 }
             }
         }
