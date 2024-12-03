@@ -33,13 +33,13 @@ impl Timings {
     pub fn read_from_file() -> Self {
         let s = fs::read_to_string(TIMINGS_FILE_PATH)
             .map_err(|x| x.to_string())
-            .and_then(Timings::try_from);
+            .and_then(Self::try_from);
 
         match s {
             Ok(timings) => timings,
             Err(e) => {
                 eprintln!("{e}");
-                Timings::default()
+                Self::default()
             }
         }
     }
@@ -59,7 +59,7 @@ impl Timings {
         }
 
         data.sort_unstable_by(|a, b| a.day.cmp(&b.day));
-        Timings { data }
+        Self { data }
     }
 
     /// Sum up total duration of timings as millis.
@@ -78,14 +78,14 @@ impl Timings {
 
 impl From<Timings> for JsonValue {
     fn from(value: Timings) -> Self {
-        let mut map: HashMap<String, JsonValue> = HashMap::new();
+        let mut map: HashMap<String, Self> = HashMap::new();
 
         map.insert(
             "data".into(),
-            JsonValue::Array(value.data.iter().map(JsonValue::from).collect()),
+            Self::Array(value.data.iter().map(Self::from).collect()),
         );
 
-        JsonValue::Object(map)
+        Self::Object(map)
     }
 }
 
@@ -103,7 +103,7 @@ impl TryFrom<String> for Timings {
             .get::<Vec<JsonValue>>()
             .ok_or("expected `json.data` to be an array.")?;
 
-        Ok(Timings {
+        Ok(Self {
             data: json_data
                 .iter()
                 .map(Timing::try_from)
@@ -116,31 +116,25 @@ impl TryFrom<String> for Timings {
 
 impl From<&Timing> for JsonValue {
     fn from(value: &Timing) -> Self {
-        let mut map: HashMap<String, JsonValue> = HashMap::new();
+        let mut map: HashMap<String, Self> = HashMap::new();
 
-        map.insert("day".into(), JsonValue::String(value.day.to_string()));
-        map.insert("total_nanos".into(), JsonValue::Number(value.total_nanos));
+        map.insert("day".into(), Self::String(value.day.to_string()));
+        map.insert("total_nanos".into(), Self::Number(value.total_nanos));
 
-        let part_1 = value.part_1.clone().map(JsonValue::String);
-        let part_2 = value.part_2.clone().map(JsonValue::String);
+        let part_1 = value.part_1.clone().map(Self::String);
+        let part_2 = value.part_2.clone().map(Self::String);
 
         map.insert(
             "part_1".into(),
-            match part_1 {
-                Some(x) => x,
-                None => JsonValue::Null,
-            },
+            part_1.map_or(Self::Null, |x| x),
         );
 
         map.insert(
             "part_2".into(),
-            match part_2 {
-                Some(x) => x,
-                None => JsonValue::Null,
-            },
+            part_2.map_or(Self::Null, |x| x),
         );
 
-        JsonValue::Object(map)
+        Self::Object(map)
     }
 }
 
@@ -173,7 +167,7 @@ impl TryFrom<&JsonValue> for Timing {
             .and_then(|v| v.get::<f64>().copied())
             .ok_or("Expected timing.total_nanos to be a number.")?;
 
-        Ok(Timing {
+        Ok(Self {
             day,
             part_1: part_1.cloned(),
             part_2: part_2.cloned(),
