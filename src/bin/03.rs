@@ -56,7 +56,7 @@ impl InputParser {
         Self {
             active,
             state: ParserState::Blank,
-            buffer: [' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            buffer: [' '; 7],
             total: 0,
         }
     }
