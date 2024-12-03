@@ -8,29 +8,17 @@ enum ParserState {
 }
 
 #[derive(Debug, PartialEq)]
-enum ParserActivity {
-    Ignore,
-    Active,
-    Inactive,
-}
-
-#[derive(Debug, PartialEq)]
 struct InputParser {
-    active: ParserActivity,
+    active: Option<bool>,
     state: ParserState,
     buffer: [char; 7],
     total: u32,
 }
 
 impl InputParser {
-    fn new(togglable: bool) -> Self {
-        let active = if togglable {
-            ParserActivity::Active
-        } else {
-            ParserActivity::Ignore
-        };
+    fn new(toggle: bool) -> Self {
         Self {
-            active,
+            active: if toggle { Some(true) } else { None },
             state: ParserState::Blank,
             buffer: [' '; 7],
             total: 0,
@@ -38,15 +26,11 @@ impl InputParser {
     }
 
     fn activate(&mut self) {
-        if self.active != ParserActivity::Ignore {
-            self.active = ParserActivity::Active;
-        }
+        self.active = self.active.map(|_| true);
     }
 
     fn deactivate(&mut self) {
-        if self.active != ParserActivity::Ignore {
-            self.active = ParserActivity::Inactive;
-        }
+        self.active = self.active.map(|_| false);
     }
 
     fn read_char(&mut self, input: char) {
@@ -81,13 +65,17 @@ impl InputParser {
                 _ => ParserState::Blank,
             },
             ParserState::SecondOperand(first, second) => {
-                match (input.to_digit(10), second, input == ')', &self.active) {
+                match (
+                    input.to_digit(10),
+                    second,
+                    input == ')',
+                    self.active.unwrap_or(true),
+                ) {
                     (Some(digit), None, _, _) => ParserState::SecondOperand(first, Some(digit)),
                     (Some(digit), Some(s), _, _) => {
                         ParserState::SecondOperand(first, Some((s * 10) + digit))
                     }
-                    (None, _, true, ParserActivity::Inactive) => ParserState::Blank,
-                    (None, Some(s), true, _) => {
+                    (None, Some(s), true, true) => {
                         self.total += first * s;
                         ParserState::Blank
                     }
@@ -147,7 +135,7 @@ mod tests {
     #[test]
     fn test_read_input() {
         let expected = InputParser {
-            active: ParserActivity::Ignore,
+            active: None,
             state: ParserState::Blank,
             buffer: ['l', '(', '8', ',', '5', ')', ')'],
             total: 161,
@@ -165,21 +153,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_activity() {
-        let mut parser = InputParser::new(true);
-        assert_eq!(parser.active, ParserActivity::Active);
-
-        parser.read_input("don't()");
-        assert_eq!(parser.active, ParserActivity::Inactive);
-
-        parser.read_input("do()");
-        assert_eq!(parser.active, ParserActivity::Active);
-    }
-
-    #[test]
     fn test_read_input_togglable() {
         let expected = InputParser {
-            active: ParserActivity::Active,
+            active: Some(true),
             state: ParserState::Blank,
             buffer: ['l', '(', '8', ',', '5', ')', ')'],
             total: 48,
