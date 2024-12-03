@@ -86,7 +86,9 @@ pub fn part_one(input: &str) -> Option<u32> {
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
-    input.parse::<LocationList>().map_or(None, |list| Some(list.similarity_score()))
+    input
+        .parse::<LocationList>()
+        .map_or(None, |list| Some(list.similarity_score()))
 }
 
 #[cfg(test)]
