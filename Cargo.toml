@@ -19,6 +19,10 @@ dhat-heap = ["dhat"]
 today = ["chrono"]
 test_lib = []
 
+[lints.clippy]
+pedantic = "warn"
+nursery = "warn"
+
 [dependencies]
 
 # Template dependencies

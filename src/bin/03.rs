@@ -16,7 +16,7 @@ struct InputParser {
 }
 
 impl InputParser {
-    fn new(toggle: bool) -> Self {
+    const fn new(toggle: bool) -> Self {
         Self {
             active: if toggle { Some(true) } else { None },
             state: ParserState::Blank,

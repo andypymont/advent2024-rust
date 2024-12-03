@@ -19,10 +19,7 @@ impl LocationList {
         self.left
             .iter()
             .enumerate()
-            .map(|(ix, l)| match self.right.get(ix) {
-                Some(r) => l.abs_diff(*r),
-                None => 0,
-            })
+            .map(|(ix, l)| self.right.get(ix).map_or(0, |r| l.abs_diff(*r)))
             .sum()
     }
 
@@ -75,27 +72,21 @@ impl FromStr for LocationList {
             right.push(r);
         }
 
-        Ok(LocationList { left, right })
+        Ok(Self { left, right })
     }
 }
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
-    match input.parse::<LocationList>() {
-        Ok(mut list) => {
-            list.sort();
-            Some(list.total_distance())
-        }
-        Err(_) => None,
-    }
+    input.parse::<LocationList>().map_or(None, |mut list| {
+        list.sort();
+        Some(list.total_distance())
+    })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
-    match input.parse::<LocationList>() {
-        Ok(list) => Some(list.similarity_score()),
-        Err(_) => None,
-    }
+    input.parse::<LocationList>().map_or(None, |list| Some(list.similarity_score()))
 }
 
 #[cfg(test)]
