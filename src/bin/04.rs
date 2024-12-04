@@ -59,7 +59,7 @@ fn word_positions(
     position: Option<usize>,
     direction: Direction,
 ) -> impl Iterator<Item = Option<usize>> {
-    (0..4).map(move |steps| relative_position(position, direction, steps))
+    (1..=3).map(move |steps| relative_position(position, direction, steps))
 }
 
 #[derive(Debug, PartialEq)]
@@ -84,7 +84,7 @@ impl WordSearch {
                             let mut letters =
                                 word_positions(Some(position), *direction).map(|pos| self.get(pos));
                             let letters = [
-                                letters.next().unwrap_or('.'),
+                                *letter,
                                 letters.next().unwrap_or('.'),
                                 letters.next().unwrap_or('.'),
                                 letters.next().unwrap_or('.'),
@@ -305,7 +305,6 @@ mod tests {
     #[test]
     fn test_word_positions() {
         let expected = vec![
-            Some(position(4, 4)),
             Some(position(3, 3)),
             Some(position(2, 2)),
             Some(position(1, 1)),
@@ -316,12 +315,7 @@ mod tests {
             expected
         );
 
-        let expected = vec![
-            Some(position(2, 2)),
-            Some(position(3, 1)),
-            Some(position(4, 0)),
-            None,
-        ];
+        let expected = vec![Some(position(3, 1)), Some(position(4, 0)), None];
         assert_eq!(
             word_positions(Some(position(2, 2)), Direction::Southwest)
                 .collect::<Vec<Option<usize>>>(),
