@@ -19,105 +19,97 @@ const SEARCH_DIRECTIONS: [Direction; 4] = [
     Direction::Southeast,
 ];
 
+const GRID_SIZE: usize = 140;
+
+fn relative_position(position: Option<usize>, direction: Direction, steps: usize) -> Option<usize> {
+    let position = position?;
+    let row = position / GRID_SIZE;
+    let col = position % GRID_SIZE;
+
+    let row = match direction {
+        Direction::East => Some(row),
+        Direction::Northwest | Direction::Northeast => row.checked_sub(steps),
+        Direction::Southwest | Direction::South | Direction::Southeast => {
+            let row = row + steps;
+            if row >= GRID_SIZE {
+                None
+            } else {
+                Some(row)
+            }
+        }
+    };
+    let row = row?;
+
+    let col = match direction {
+        Direction::South => Some(col),
+        Direction::Northwest | Direction::Southwest => col.checked_sub(steps),
+        Direction::Northeast | Direction::East | Direction::Southeast => {
+            let col = col + steps;
+            if col >= GRID_SIZE {
+                None
+            } else {
+                Some(col)
+            }
+        }
+    };
+    col.map(|c| (row * GRID_SIZE) + c)
+}
+
+fn word_positions(
+    position: Option<usize>,
+    direction: Direction,
+) -> impl Iterator<Item = Option<usize>> {
+    (0..4).map(move |steps| relative_position(position, direction, steps))
+}
+
 #[derive(Debug, PartialEq)]
 struct WordSearch {
-    height: usize,
-    width: usize,
-    grid: Vec<Vec<char>>,
+    grid: [char; GRID_SIZE * GRID_SIZE],
 }
 
 impl WordSearch {
-    fn get(&self, position: Option<(usize, usize)>) -> char {
-        match position {
-            Some((r, c)) => self.grid[r][c],
-            None => '.',
-        }
-    }
-
-    fn word_positions(
-        &self,
-        position: Option<(usize, usize)>,
-        direction: Direction,
-    ) -> impl Iterator<Item = Option<(usize, usize)>> + use<'_> {
-        (0..4).map(move |steps| self.relative_position(position, direction, steps))
-    }
-
-    fn relative_position(
-        &self,
-        position: Option<(usize, usize)>,
-        direction: Direction,
-        steps: usize,
-    ) -> Option<(usize, usize)> {
-        let (row, col) = position?;
-
-        let row = match direction {
-            Direction::East => Some(row),
-            Direction::Northwest | Direction::Northeast => row.checked_sub(steps),
-            Direction::Southwest | Direction::South | Direction::Southeast => {
-                let row = row + steps;
-                if row >= self.height {
-                    None
-                } else {
-                    Some(row)
-                }
-            }
-        };
-        let row = row?;
-
-        let col = match direction {
-            Direction::South => Some(col),
-            Direction::Northwest | Direction::Southwest => col.checked_sub(steps),
-            Direction::Northeast | Direction::East | Direction::Southeast => {
-                let col = col + steps;
-                if col >= self.width {
-                    None
-                } else {
-                    Some(col)
-                }
-            }
-        };
-
-        col.map(|col| (row, col))
+    fn get(&self, position: Option<usize>) -> char {
+        position.map_or('.', |pos| self.grid[pos])
     }
 
     fn xmas_count(&self) -> u32 {
-        let mut count = 0;
-
-        for (r, row) in self.grid.iter().enumerate() {
-            for (c, letter) in row.iter().enumerate() {
-                let position = Some((r, c));
-
-                if letter == &'X' || letter == &'S' {
-                    for direction in SEARCH_DIRECTIONS {
-                        let mut letters = self
-                            .word_positions(position, direction)
-                            .map(|pos| self.get(pos));
-                        let letters = [
-                            letters.next().unwrap_or('.'),
-                            letters.next().unwrap_or('.'),
-                            letters.next().unwrap_or('.'),
-                            letters.next().unwrap_or('.'),
-                        ];
-                        if letters == ['X', 'M', 'A', 'S'] || letters == ['S', 'A', 'M', 'X'] {
-                            count += 1;
-                        };
-                    }
+        self.grid
+            .iter()
+            .enumerate()
+            .map(|(position, letter)| {
+                if *letter == 'X' || *letter == 'S' {
+                    SEARCH_DIRECTIONS
+                        .iter()
+                        .map(|direction| {
+                            let mut letters =
+                                word_positions(Some(position), *direction).map(|pos| self.get(pos));
+                            let letters = [
+                                letters.next().unwrap_or('.'),
+                                letters.next().unwrap_or('.'),
+                                letters.next().unwrap_or('.'),
+                                letters.next().unwrap_or('.'),
+                            ];
+                            u32::from(
+                                letters == ['X', 'M', 'A', 'S'] || letters == ['S', 'A', 'M', 'X'],
+                            )
+                        })
+                        .sum()
+                } else {
+                    0
                 }
-            }
-        }
-
-        count
+            })
+            .sum()
     }
 
-    fn cross_mas_at(&self, position: Option<(usize, usize)>) -> bool {
-        if self.get(position) != 'A' {
+    fn cross_mas_at(&self, position: Option<usize>, letter: char) -> bool {
+        if letter != 'A' {
             return false;
         }
 
-        let nw = self.get(self.relative_position(position, Direction::Northwest, 1));
-        let ne = self.get(self.relative_position(position, Direction::Northeast, 1));
-        let sw = self.get(self.relative_position(position, Direction::Southwest, 1));
-        let se = self.get(self.relative_position(position, Direction::Southeast, 1));
+        let nw = self.get(relative_position(position, Direction::Northwest, 1));
+        let ne = self.get(relative_position(position, Direction::Northeast, 1));
+        let sw = self.get(relative_position(position, Direction::Southwest, 1));
+        let se = self.get(relative_position(position, Direction::Southeast, 1));
 
         let nw_se = (nw == 'M' && se == 'S') || (nw == 'S' && se == 'M');
         let ne_sw = (ne == 'M' && sw == 'S') || (ne == 'S' && sw == 'M');
@@ -125,15 +117,11 @@ impl WordSearch {
     }
 
     fn cross_mas_count(&self) -> u32 {
-        let mut count = 0;
-
-        for (r, row) in self.grid.iter().enumerate() {
-            for c in 0..row.len() {
-                count += u32::from(self.cross_mas_at(Some((r, c))));
-            }
-        }
-
-        count
+        self.grid
+            .iter()
+            .enumerate()
+            .map(|(pos, ch)| u32::from(self.cross_mas_at(Some(pos), *ch)))
+            .sum()
     }
 }
 
@@ -144,21 +132,13 @@ impl FromStr for WordSearch {
     type Err = ParseWordSearchError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let mut width = 0;
-        let grid: Vec<Vec<char>> = input
-            .lines()
-            .map(|line| {
-                let row: Vec<char> = line.chars().collect();
-                width = width.max(row.len());
-                row
-            })
-            .collect();
-        let height = grid.len();
-        Ok(Self {
-            height,
-            width,
-            grid,
-        })
+        let mut grid = ['.'; GRID_SIZE * GRID_SIZE];
+        for (row, line) in input.lines().enumerate() {
+            for (col, ch) in line.chars().enumerate() {
+                grid[(row * GRID_SIZE) + col] = ch;
+            }
+        }
+        Ok(Self { grid })
     }
 }
 
@@ -180,67 +160,171 @@ pub fn part_two(input: &str) -> Option<u32> {
 mod tests {
     use super::*;
 
+    fn position(row: usize, col: usize) -> usize {
+        (row * GRID_SIZE) + col
+    }
+
     fn example_word_search() -> WordSearch {
-        WordSearch {
-            height: 10,
-            width: 10,
-            grid: vec![
-                vec!['M', 'M', 'M', 'S', 'X', 'X', 'M', 'A', 'S', 'M'],
-                vec!['M', 'S', 'A', 'M', 'X', 'M', 'S', 'M', 'S', 'A'],
-                vec!['A', 'M', 'X', 'S', 'X', 'M', 'A', 'A', 'M', 'M'],
-                vec!['M', 'S', 'A', 'M', 'A', 'S', 'M', 'S', 'M', 'X'],
-                vec!['X', 'M', 'A', 'S', 'A', 'M', 'X', 'A', 'M', 'M'],
-                vec!['X', 'X', 'A', 'M', 'M', 'X', 'X', 'A', 'M', 'A'],
-                vec!['S', 'M', 'S', 'M', 'S', 'A', 'S', 'X', 'S', 'S'],
-                vec!['S', 'A', 'X', 'A', 'M', 'A', 'S', 'A', 'A', 'A'],
-                vec!['M', 'A', 'M', 'M', 'M', 'X', 'M', 'M', 'M', 'M'],
-                vec!['M', 'X', 'M', 'X', 'A', 'X', 'M', 'A', 'S', 'X'],
-            ],
-        }
+        let mut grid = ['.'; GRID_SIZE * GRID_SIZE];
+
+        grid[position(0, 0)] = 'M';
+        grid[position(0, 1)] = 'M';
+        grid[position(0, 2)] = 'M';
+        grid[position(0, 3)] = 'S';
+        grid[position(0, 4)] = 'X';
+        grid[position(0, 5)] = 'X';
+        grid[position(0, 6)] = 'M';
+        grid[position(0, 7)] = 'A';
+        grid[position(0, 8)] = 'S';
+        grid[position(0, 9)] = 'M';
+
+        grid[position(1, 0)] = 'M';
+        grid[position(1, 1)] = 'S';
+        grid[position(1, 2)] = 'A';
+        grid[position(1, 3)] = 'M';
+        grid[position(1, 4)] = 'X';
+        grid[position(1, 5)] = 'M';
+        grid[position(1, 6)] = 'S';
+        grid[position(1, 7)] = 'M';
+        grid[position(1, 8)] = 'S';
+        grid[position(1, 9)] = 'A';
+
+        grid[position(2, 0)] = 'A';
+        grid[position(2, 1)] = 'M';
+        grid[position(2, 2)] = 'X';
+        grid[position(2, 3)] = 'S';
+        grid[position(2, 4)] = 'X';
+        grid[position(2, 5)] = 'M';
+        grid[position(2, 6)] = 'A';
+        grid[position(2, 7)] = 'A';
+        grid[position(2, 8)] = 'M';
+        grid[position(2, 9)] = 'M';
+
+        grid[position(3, 0)] = 'M';
+        grid[position(3, 1)] = 'S';
+        grid[position(3, 2)] = 'A';
+        grid[position(3, 3)] = 'M';
+        grid[position(3, 4)] = 'A';
+        grid[position(3, 5)] = 'S';
+        grid[position(3, 6)] = 'M';
+        grid[position(3, 7)] = 'S';
+        grid[position(3, 8)] = 'M';
+        grid[position(3, 9)] = 'X';
+
+        grid[position(4, 0)] = 'X';
+        grid[position(4, 1)] = 'M';
+        grid[position(4, 2)] = 'A';
+        grid[position(4, 3)] = 'S';
+        grid[position(4, 4)] = 'A';
+        grid[position(4, 5)] = 'M';
+        grid[position(4, 6)] = 'X';
+        grid[position(4, 7)] = 'A';
+        grid[position(4, 8)] = 'M';
+        grid[position(4, 9)] = 'M';
+
+        grid[position(5, 0)] = 'X';
+        grid[position(5, 1)] = 'X';
+        grid[position(5, 2)] = 'A';
+        grid[position(5, 3)] = 'M';
+        grid[position(5, 4)] = 'M';
+        grid[position(5, 5)] = 'X';
+        grid[position(5, 6)] = 'X';
+        grid[position(5, 7)] = 'A';
+        grid[position(5, 8)] = 'M';
+        grid[position(5, 9)] = 'A';
+
+        grid[position(6, 0)] = 'S';
+        grid[position(6, 1)] = 'M';
+        grid[position(6, 2)] = 'S';
+        grid[position(6, 3)] = 'M';
+        grid[position(6, 4)] = 'S';
+        grid[position(6, 5)] = 'A';
+        grid[position(6, 6)] = 'S';
+        grid[position(6, 7)] = 'X';
+        grid[position(6, 8)] = 'S';
+        grid[position(6, 9)] = 'S';
+
+        grid[position(7, 0)] = 'S';
+        grid[position(7, 1)] = 'A';
+        grid[position(7, 2)] = 'X';
+        grid[position(7, 3)] = 'A';
+        grid[position(7, 4)] = 'M';
+        grid[position(7, 5)] = 'A';
+        grid[position(7, 6)] = 'S';
+        grid[position(7, 7)] = 'A';
+        grid[position(7, 8)] = 'A';
+        grid[position(7, 9)] = 'A';
+
+        grid[position(8, 0)] = 'M';
+        grid[position(8, 1)] = 'A';
+        grid[position(8, 2)] = 'M';
+        grid[position(8, 3)] = 'M';
+        grid[position(8, 4)] = 'M';
+        grid[position(8, 5)] = 'X';
+        grid[position(8, 6)] = 'M';
+        grid[position(8, 7)] = 'M';
+        grid[position(8, 8)] = 'M';
+        grid[position(8, 9)] = 'M';
+
+        grid[position(9, 0)] = 'M';
+        grid[position(9, 1)] = 'X';
+        grid[position(9, 2)] = 'M';
+        grid[position(9, 3)] = 'X';
+        grid[position(9, 4)] = 'A';
+        grid[position(9, 5)] = 'X';
+        grid[position(9, 6)] = 'M';
+        grid[position(9, 7)] = 'A';
+        grid[position(9, 8)] = 'S';
+        grid[position(9, 9)] = 'X';
+
+        WordSearch { grid }
     }
 
     #[test]
     fn test_word_search_get() {
         let word_search = example_word_search();
         assert_eq!(word_search.get(None), '.');
-        assert_eq!(word_search.get(Some((0, 0))), 'M');
-        assert_eq!(word_search.get(Some((1, 1))), 'S');
+        assert_eq!(word_search.get(Some(position(0, 0))), 'M');
+        assert_eq!(word_search.get(Some(position(1, 1))), 'S');
     }
 
     #[test]
     fn test_relative_position() {
-        let word_search = example_word_search();
-        let position = Some((4, 4));
+        let pos = Some(position(4, 4));
         assert_eq!(
-            word_search.relative_position(position, Direction::Northwest, 1),
-            Some((3, 3)),
+            relative_position(pos, Direction::Northwest, 1),
+            Some(position(3, 3)),
         );
         assert_eq!(
-            word_search.relative_position(position, Direction::Southeast, 2),
-            Some((6, 6)),
+            relative_position(pos, Direction::Southeast, 2),
+            Some(position(6, 6)),
         );
-        assert_eq!(
-            word_search.relative_position(position, Direction::Southwest, 5),
-            None,
-        );
+        assert_eq!(relative_position(pos, Direction::Southwest, 5), None,);
     }
 
     #[test]
     fn test_word_positions() {
-        let word_search = example_word_search();
-        let expected = vec![Some((4, 4)), Some((3, 3)), Some((2, 2)), Some((1, 1))];
+        let expected = vec![
+            Some(position(4, 4)),
+            Some(position(3, 3)),
+            Some(position(2, 2)),
+            Some(position(1, 1)),
+        ];
         assert_eq!(
-            word_search
-                .word_positions(Some((4, 4)), Direction::Northwest)
-                .collect::<Vec<Option<(usize, usize)>>>(),
+            word_positions(Some(position(4, 4)), Direction::Northwest)
+                .collect::<Vec<Option<usize>>>(),
             expected
         );
 
-        let expected = vec![Some((2, 2)), Some((3, 1)), Some((4, 0)), None];
+        let expected = vec![
+            Some(position(2, 2)),
+            Some(position(3, 1)),
+            Some(position(4, 0)),
+            None,
+        ];
         assert_eq!(
-            word_search
-                .word_positions(Some((2, 2)), Direction::Southwest)
-                .collect::<Vec<Option<(usize, usize)>>>(),
+            word_positions(Some(position(2, 2)), Direction::Southwest)
+                .collect::<Vec<Option<usize>>>(),
             expected
         );
     }
@@ -262,10 +346,10 @@ mod tests {
     #[test]
     fn test_cross_mas() {
         let word_search = example_word_search();
-        assert_eq!(word_search.cross_mas_at(Some((1, 2))), true);
-        assert_eq!(word_search.cross_mas_at(Some((2, 2))), false);
-        assert_eq!(word_search.cross_mas_at(Some((2, 6))), true);
-        assert_eq!(word_search.cross_mas_at(Some((4, 2))), false);
+        assert_eq!(word_search.cross_mas_at(Some(position(1, 2)), 'A'), true);
+        assert_eq!(word_search.cross_mas_at(Some(position(2, 2)), 'X'), false);
+        assert_eq!(word_search.cross_mas_at(Some(position(2, 6)), 'A'), true);
+        assert_eq!(word_search.cross_mas_at(Some(position(4, 2)), 'A'), false);
     }
 
     #[test]
