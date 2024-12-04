@@ -2,13 +2,7 @@ use std::str::FromStr;
 
 advent_of_code::solution!(4);
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum Position {
-    Coordinates(usize, usize),
-    OutOfBounds,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Direction {
     Northeast,
     East,
@@ -33,30 +27,28 @@ struct WordSearch {
 }
 
 impl WordSearch {
-    fn get(&self, position: Position) -> char {
+    fn get(&self, position: Option<(usize, usize)>) -> char {
         match position {
-            Position::Coordinates(r, c) => self.grid[r][c],
-            Position::OutOfBounds => '.',
+            Some((r, c)) => self.grid[r][c],
+            None => '.',
         }
     }
 
     fn word_positions(
         &self,
-        position: Position,
+        position: Option<(usize, usize)>,
         direction: Direction,
-    ) -> impl Iterator<Item = Position> + use<'_> {
+    ) -> impl Iterator<Item = Option<(usize, usize)>> + use<'_> {
         (0..4).map(move |steps| self.relative_position(position, direction, steps))
     }
 
     fn relative_position(
         &self,
-        position: Position,
+        position: Option<(usize, usize)>,
         direction: Direction,
         steps: usize,
-    ) -> Position {
-        let Position::Coordinates(row, col) = position else {
-            return Position::OutOfBounds;
-        };
+    ) -> Option<(usize, usize)> {
+        let (row, col) = position?;
 
         let row = match direction {
             Direction::East => Some(row),
@@ -70,9 +62,7 @@ impl WordSearch {
                 }
             }
         };
-        let Some(row) = row else {
-            return Position::OutOfBounds;
-        };
+        let row = row?;
 
         let col = match direction {
             Direction::South => Some(col),
@@ -87,7 +77,7 @@ impl WordSearch {
             }
         };
 
-        col.map_or(Position::OutOfBounds, |col| Position::Coordinates(row, col))
+        col.map(|col| (row, col))
     }
 
     fn xmas_count(&self) -> u32 {
@@ -95,7 +85,7 @@ impl WordSearch {
 
         for (r, row) in self.grid.iter().enumerate() {
             for (c, letter) in row.iter().enumerate() {
-                let position = Position::Coordinates(r, c);
+                let position = Some((r, c));
 
                 if letter == &'X' || letter == &'S' {
                     for direction in SEARCH_DIRECTIONS {
@@ -119,7 +109,7 @@ impl WordSearch {
         count
     }
 
-    fn cross_mas_at(&self, position: Position) -> bool {
+    fn cross_mas_at(&self, position: Option<(usize, usize)>) -> bool {
         if self.get(position) != 'A' {
             return false;
         }
@@ -139,7 +129,7 @@ impl WordSearch {
 
         for (r, row) in self.grid.iter().enumerate() {
             for c in 0..row.len() {
-                count += u32::from(self.cross_mas_at(Position::Coordinates(r, c)));
+                count += u32::from(self.cross_mas_at(Some((r, c))));
             }
         }
 
@@ -212,55 +202,45 @@ mod tests {
     #[test]
     fn test_word_search_get() {
         let word_search = example_word_search();
-        assert_eq!(word_search.get(Position::OutOfBounds), '.');
-        assert_eq!(word_search.get(Position::Coordinates(0, 0)), 'M');
-        assert_eq!(word_search.get(Position::Coordinates(1, 1)), 'S');
+        assert_eq!(word_search.get(None), '.');
+        assert_eq!(word_search.get(Some((0, 0))), 'M');
+        assert_eq!(word_search.get(Some((1, 1))), 'S');
     }
 
     #[test]
     fn test_relative_position() {
         let word_search = example_word_search();
-        let position = Position::Coordinates(4, 4);
+        let position = Some((4, 4));
         assert_eq!(
             word_search.relative_position(position, Direction::Northwest, 1),
-            Position::Coordinates(3, 3),
+            Some((3, 3)),
         );
         assert_eq!(
             word_search.relative_position(position, Direction::Southeast, 2),
-            Position::Coordinates(6, 6),
+            Some((6, 6)),
         );
         assert_eq!(
             word_search.relative_position(position, Direction::Southwest, 5),
-            Position::OutOfBounds,
+            None,
         );
     }
 
     #[test]
     fn test_word_positions() {
         let word_search = example_word_search();
-        let expected = vec![
-            Position::Coordinates(4, 4),
-            Position::Coordinates(3, 3),
-            Position::Coordinates(2, 2),
-            Position::Coordinates(1, 1),
-        ];
+        let expected = vec![Some((4, 4)), Some((3, 3)), Some((2, 2)), Some((1, 1))];
         assert_eq!(
             word_search
-                .word_positions(Position::Coordinates(4, 4), Direction::Northwest)
-                .collect::<Vec<Position>>(),
+                .word_positions(Some((4, 4)), Direction::Northwest)
+                .collect::<Vec<Option<(usize, usize)>>>(),
             expected
         );
 
-        let expected = vec![
-            Position::Coordinates(2, 2),
-            Position::Coordinates(3, 1),
-            Position::Coordinates(4, 0),
-            Position::OutOfBounds,
-        ];
+        let expected = vec![Some((2, 2)), Some((3, 1)), Some((4, 0)), None];
         assert_eq!(
             word_search
-                .word_positions(Position::Coordinates(2, 2), Direction::Southwest)
-                .collect::<Vec<Position>>(),
+                .word_positions(Some((2, 2)), Direction::Southwest)
+                .collect::<Vec<Option<(usize, usize)>>>(),
             expected
         );
     }
@@ -282,10 +262,10 @@ mod tests {
     #[test]
     fn test_cross_mas() {
         let word_search = example_word_search();
-        assert_eq!(word_search.cross_mas_at(Position::Coordinates(1, 2)), true);
-        assert_eq!(word_search.cross_mas_at(Position::Coordinates(2, 2)), false);
-        assert_eq!(word_search.cross_mas_at(Position::Coordinates(2, 6)), true);
-        assert_eq!(word_search.cross_mas_at(Position::Coordinates(4, 2)), false);
+        assert_eq!(word_search.cross_mas_at(Some((1, 2))), true);
+        assert_eq!(word_search.cross_mas_at(Some((2, 2))), false);
+        assert_eq!(word_search.cross_mas_at(Some((2, 6))), true);
+        assert_eq!(word_search.cross_mas_at(Some((4, 2))), false);
     }
 
     #[test]
