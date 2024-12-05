@@ -146,7 +146,7 @@ impl FromStr for PuzzleInput {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    input.parse::<PuzzleInput>().map_or(None, |input| {
+    PuzzleInput::from_str(input).map_or(None, |input| {
         Some(
             input
                 .updates
@@ -165,7 +165,7 @@ pub fn part_one(input: &str) -> Option<usize> {
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    input.parse::<PuzzleInput>().map_or(None, |input| {
+    PuzzleInput::from_str(input).map_or(None, |input| {
         Some(
             input
                 .updates

@@ -78,7 +78,7 @@ impl FromStr for LocationList {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
-    input.parse::<LocationList>().map_or(None, |mut list| {
+    LocationList::from_str(input).map_or(None, |mut list| {
         list.sort();
         Some(list.total_distance())
     })
@@ -86,9 +86,7 @@ pub fn part_one(input: &str) -> Option<u32> {
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
-    input
-        .parse::<LocationList>()
-        .map_or(None, |list| Some(list.similarity_score()))
+    LocationList::from_str(input).map_or(None, |list| Some(list.similarity_score()))
 }
 
 #[cfg(test)]
