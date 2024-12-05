@@ -17,7 +17,7 @@ impl Rules {
         }
     }
 
-    fn correct_order(&self, update: &[u8]) -> bool {
+    fn in_correct_order(&self, update: &[u8]) -> bool {
         let mut invalid: BTreeSet<u8> = BTreeSet::new();
 
         for page in update {
@@ -26,20 +26,52 @@ impl Rules {
             }
 
             if let Some(newly_invalid) = self.rules.get(page) {
-                invalid.extend(newly_invalid)
+                invalid.extend(newly_invalid);
             }
         }
 
         true
     }
-    
-    fn get(&self, page: u8) -> Option<&BTreeSet<u8>> {
-        self.rules.get(&page)
+
+    fn corrected_order(&self, update: &[u8]) -> Option<Vec<u8>> {
+        let mut output = Vec::new();
+        let mut reordered = false;
+
+        for page in update {
+            let mut inserted = false;
+
+            for (ix, other) in output.iter().enumerate() {
+                if self
+                    .rules
+                    .get(other)
+                    .is_some_and(|invalid| invalid.contains(page))
+                {
+                    output.insert(ix, *page);
+                    inserted = true;
+                    break;
+                }
+            }
+
+            if inserted {
+                reordered = true;
+            } else {
+                output.push(*page);
+            }
+        }
+
+        if reordered {
+            Some(output)
+        } else {
+            None
+        }
     }
 
     fn insert(&mut self, page: u8, not_before: u8) {
-        self.rules.entry(page)
-            .and_modify(|entry| { entry.insert(not_before); })
+        self.rules
+            .entry(page)
+            .and_modify(|entry| {
+                entry.insert(not_before);
+            })
             .or_insert_with(|| {
                 let mut entry = BTreeSet::new();
                 entry.insert(not_before);
@@ -102,10 +134,7 @@ impl FromStr for PuzzleInput {
         if let Some((first, second)) = input.split_once("\n\n") {
             let rules = first.parse()?;
             let updates = parse_updates(second)?;
-            Ok(Self {
-                rules,
-                updates,
-            })
+            Ok(Self { rules, updates })
         } else {
             Err(ParsePuzzleInputError)
         }
@@ -115,19 +144,34 @@ impl FromStr for PuzzleInput {
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
     input.parse::<PuzzleInput>().map_or(None, |input| {
-        Some(input.updates.iter()
-                    .map(|update| if input.rules.correct_order(update) {
-                        u32::from(update[update.len()/2])
+        Some(
+            input
+                .updates
+                .iter()
+                .map(|update| {
+                    if input.rules.in_correct_order(update) {
+                        u32::from(update[update.len() / 2])
                     } else {
                         0
-                    })
-                    .sum())
+                    }
+                })
+                .sum(),
+        )
     })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
-    None
+    input.parse::<PuzzleInput>().map_or(None, |input| {
+        Some(
+            input
+                .updates
+                .iter()
+                .filter_map(|update| input.rules.corrected_order(update))
+                .map(|update| u32::from(update[update.len() / 2]))
+                .sum(),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -160,23 +204,20 @@ mod tests {
             vec![61, 13, 29],
             vec![97, 13, 75, 29, 47],
         ];
-        PuzzleInput {
-            rules,
-            updates,
-        }
+        PuzzleInput { rules, updates }
     }
 
     #[test]
-    fn test_correct_order() {
+    fn test_in_correct_order() {
         let input = example_puzzle_input();
         let rules = input.rules;
 
-        assert_eq!(rules.correct_order(&[75, 47, 61, 53, 29]), true);
-        assert_eq!(rules.correct_order(&[97, 61, 53, 29, 13]), true);
-        assert_eq!(rules.correct_order(&[75, 29, 13]), true);
-        assert_eq!(rules.correct_order(&[75, 97, 47, 61, 53]), false);
-        assert_eq!(rules.correct_order(&[61, 13, 29]), false);
-        assert_eq!(rules.correct_order(&[97, 13, 75, 29, 47]), false);
+        assert_eq!(rules.in_correct_order(&[75, 47, 61, 53, 29]), true);
+        assert_eq!(rules.in_correct_order(&[97, 61, 53, 29, 13]), true);
+        assert_eq!(rules.in_correct_order(&[75, 29, 13]), true);
+        assert_eq!(rules.in_correct_order(&[75, 97, 47, 61, 53]), false);
+        assert_eq!(rules.in_correct_order(&[61, 13, 29]), false);
+        assert_eq!(rules.in_correct_order(&[97, 13, 75, 29, 47]), false);
     }
 
     #[test]
@@ -194,8 +235,25 @@ mod tests {
     }
 
     #[test]
+    fn test_corrected_order() {
+        let input = example_puzzle_input();
+        let rules = input.rules;
+
+        assert_eq!(rules.corrected_order(&[75, 47, 61, 53, 29]), None);
+        assert_eq!(
+            rules.corrected_order(&[75, 97, 47, 61, 53]),
+            Some(vec![97, 75, 47, 61, 53])
+        );
+        assert_eq!(rules.corrected_order(&[61, 13, 29]), Some(vec![61, 29, 13]));
+        assert_eq!(
+            rules.corrected_order(&[97, 13, 75, 29, 47]),
+            Some(vec![97, 75, 47, 29, 13])
+        );
+    }
+
+    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(123));
     }
 }
