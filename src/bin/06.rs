@@ -57,6 +57,37 @@ impl Direction {
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct FacingVisitTracker {
+    visited: [bool; GRID_SIZE * GRID_SIZE * 4],
+}
+
+impl FacingVisitTracker {
+    const fn new() -> Self {
+        Self {
+            visited: [false; GRID_SIZE * GRID_SIZE * 4],
+        }
+    }
+
+    const fn key(position: usize, facing: &Direction) -> usize {
+        let facing = match facing {
+            Direction::North => 0,
+            Direction::East => 1,
+            Direction::South => 2,
+            Direction::West => 3,
+        };
+        (position * 4) + facing
+    }
+
+    const fn contains(&self, position: usize, facing: &Direction) -> bool {
+        self.visited[Self::key(position, facing)]
+    }
+
+    fn insert(&mut self, position: usize, facing: &Direction) {
+        self.visited[Self::key(position, facing)] = true;
+    }
+}
+
 type Grid = [Option<bool>; GRID_SIZE * GRID_SIZE];
 
 #[derive(Debug, PartialEq)]
@@ -85,6 +116,34 @@ impl PatrolArea {
         }
 
         visits
+    }
+
+    fn patrol_loops(&self, extra_obstacle: usize) -> bool {
+        let mut visits = FacingVisitTracker::new();
+
+        let mut grid = self.grid;
+        grid[extra_obstacle] = Some(true);
+
+        let mut position = self.start;
+        let mut facing = Direction::North;
+
+        loop {
+            if visits.contains(position, &facing) {
+                return true;
+            }
+            visits.insert(position, &facing);
+
+            let Some(ahead) = facing.step_from(position) else {
+                break;
+            };
+            match grid[ahead] {
+                None => break,
+                Some(true) => facing = facing.turn_right(),
+                Some(false) => position = ahead,
+            }
+        }
+
+        false
     }
 }
 
@@ -125,8 +184,17 @@ pub fn part_one(input: &str) -> Option<u32> {
 }
 
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    PatrolArea::from_str(input).map_or(None, |area| {
+        Some(
+            area.patrol_visits()
+                .iter()
+                .enumerate()
+                .filter_map(|(pos, route)| if *route { Some(pos) } else { None })
+                .filter(|pos| area.patrol_loops(*pos))
+                .count(),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -318,8 +386,35 @@ mod tests {
     }
 
     #[test]
+    fn test_facing_visit_tracker() {
+        let mut fvt = FacingVisitTracker::new();
+        assert_eq!(fvt.contains(position(4, 4), &Direction::North), false);
+        assert_eq!(fvt.contains(position(2, 2), &Direction::East), false);
+        assert_eq!(fvt.contains(position(2, 2), &Direction::South), false);
+
+        fvt.insert(position(2, 2), &Direction::East);
+        assert_eq!(fvt.contains(position(4, 4), &Direction::North), false);
+        assert_eq!(fvt.contains(position(2, 2), &Direction::East), true);
+        assert_eq!(fvt.contains(position(2, 2), &Direction::South), false);
+
+        fvt.insert(position(2, 2), &Direction::South);
+        assert_eq!(fvt.contains(position(4, 4), &Direction::North), false);
+        assert_eq!(fvt.contains(position(2, 2), &Direction::East), true);
+        assert_eq!(fvt.contains(position(2, 2), &Direction::South), true);
+    }
+
+    #[test]
+    fn test_patrol_loops() {
+        let area = example_patrol_area();
+        assert_eq!(area.patrol_loops(position(0, 0)), false);
+        assert_eq!(area.patrol_loops(position(6, 3)), true);
+        assert_eq!(area.patrol_loops(position(6, 5)), false);
+        assert_eq!(area.patrol_loops(position(7, 6)), true);
+    }
+
+    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(6));
     }
 }
