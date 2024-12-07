@@ -2,6 +2,19 @@ use std::str::FromStr;
 
 advent_of_code::solution!(7);
 
+const fn concat(mut first: u64, second: u64) -> u64 {
+    let mut digits = second;
+    loop {
+        first *= 10;
+        digits /= 10;
+        if digits == 0 {
+            break;
+        }
+    }
+
+    first + second
+}
+
 #[derive(Debug, PartialEq)]
 struct CalibrationValue {
     target: u64,
@@ -27,8 +40,32 @@ impl CalibrationValue {
         })
     }
 
-    fn is_possible(&self) -> bool {
-        self.combinations().any(|combo| combo == self.target)
+    fn combinations_with_concat(&self) -> impl Iterator<Item = u64> + use<'_> {
+        let len: u32 = self.values.len().try_into().unwrap_or(0);
+        let max = 3_u64.pow(len.saturating_sub(1));
+        (0..max).map(|mut combo| {
+            let mut total = *self.values.first().unwrap_or(&0);
+
+            for value in &self.values[1..] {
+                let op = combo % 3;
+                combo /= 3;
+                match op {
+                    2 => total += value,
+                    1 => total *= value,
+                    _ => total = concat(total, *value),
+                }
+            }
+
+            total
+        })
+    }
+
+    fn is_possible(&self, including_concat: bool) -> bool {
+        if including_concat {
+            self.combinations_with_concat().any(|c| c == self.target)
+        } else {
+            self.combinations().any(|c| c == self.target)
+        }
     }
 }
 
@@ -62,7 +99,7 @@ pub fn part_one(input: &str) -> Option<u64> {
             .lines()
             .filter_map(|line| {
                 CalibrationValue::from_str(line).map_or(None, |cv| {
-                    Some(if cv.is_possible() { cv.target } else { 0 })
+                    Some(if cv.is_possible(false) { cv.target } else { 0 })
                 })
             })
             .sum(),
@@ -70,8 +107,17 @@ pub fn part_one(input: &str) -> Option<u64> {
 }
 
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u64> {
+    Some(
+        input
+            .lines()
+            .filter_map(|line| {
+                CalibrationValue::from_str(line).map_or(None, |cv| {
+                    Some(if cv.is_possible(true) { cv.target } else { 0 })
+                })
+            })
+            .sum(),
+    )
 }
 
 #[cfg(test)]
@@ -123,11 +169,11 @@ mod tests {
     fn test_combinations() {
         let values = example_calibration_values();
         assert_eq!(
-            values[0].combinations().collect::<Vec<u32>>(),
+            values[0].combinations().collect::<Vec<u64>>(),
             vec![190, 29]
         );
         assert_eq!(
-            values[1].combinations().collect::<Vec<u32>>(),
+            values[1].combinations().collect::<Vec<u64>>(),
             vec![87480, 3267, 3267, 148]
         );
     }
@@ -135,15 +181,15 @@ mod tests {
     #[test]
     fn test_is_possible() {
         let values = example_calibration_values();
-        assert_eq!(values[0].is_possible(), true);
-        assert_eq!(values[1].is_possible(), true);
-        assert_eq!(values[2].is_possible(), false);
-        assert_eq!(values[3].is_possible(), false);
-        assert_eq!(values[4].is_possible(), false);
-        assert_eq!(values[5].is_possible(), false);
-        assert_eq!(values[6].is_possible(), false);
-        assert_eq!(values[7].is_possible(), false);
-        assert_eq!(values[8].is_possible(), true);
+        assert_eq!(values[0].is_possible(false), true);
+        assert_eq!(values[1].is_possible(false), true);
+        assert_eq!(values[2].is_possible(false), false);
+        assert_eq!(values[3].is_possible(false), false);
+        assert_eq!(values[4].is_possible(false), false);
+        assert_eq!(values[5].is_possible(false), false);
+        assert_eq!(values[6].is_possible(false), false);
+        assert_eq!(values[7].is_possible(false), false);
+        assert_eq!(values[8].is_possible(false), true);
     }
 
     #[test]
@@ -164,8 +210,42 @@ mod tests {
     }
 
     #[test]
+    fn test_concat() {
+        assert_eq!(concat(1, 0), 10);
+        assert_eq!(concat(12, 13), 1213);
+        assert_eq!(concat(271, 1), 2711);
+    }
+
+    #[test]
+    fn test_combinations_with_concat() {
+        let values = example_calibration_values();
+        assert_eq!(
+            values[0].combinations_with_concat().collect::<Vec<u64>>(),
+            vec![1019, 190, 29]
+        );
+        assert_eq!(
+            values[1].combinations_with_concat().collect::<Vec<u64>>(),
+            vec![814027, 324027, 12127, 219780, 87480, 3267, 8167, 3267, 148]
+        );
+    }
+
+    #[test]
+    fn test_is_possible_with_concat() {
+        let values = example_calibration_values();
+        assert_eq!(values[0].is_possible(true), true);
+        assert_eq!(values[1].is_possible(true), true);
+        assert_eq!(values[2].is_possible(true), false);
+        assert_eq!(values[3].is_possible(true), true);
+        assert_eq!(values[4].is_possible(true), true);
+        assert_eq!(values[5].is_possible(true), false);
+        assert_eq!(values[6].is_possible(true), true);
+        assert_eq!(values[7].is_possible(true), false);
+        assert_eq!(values[8].is_possible(true), true);
+    }
+
+    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(11_387));
     }
 }
