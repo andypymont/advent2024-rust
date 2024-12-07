@@ -22,28 +22,36 @@ struct CalibrationValue {
 }
 
 impl CalibrationValue {
-    fn combinations(&self, operators: u64) -> impl Iterator<Item = u64> + use<'_> {
-        let len: u32 = self.values.len().try_into().unwrap_or(0);
-        let max = operators.pow(len.saturating_sub(1));
-        (0..max).map(move |mut combo| {
-            let mut total = *self.values.first().unwrap_or(&0);
+    fn find_combinations(
+        &self,
+        use_concat: bool,
+        pos: usize,
+    ) -> impl Iterator<Item = u64> + use<'_> {
+        let value = self.values[pos];
 
-            for value in &self.values[1..] {
-                let op = combo % operators;
-                combo /= operators;
-                total = match op {
-                    2 => concat(total, *value),
-                    1 => total + value,
-                    _ => total * value,
-                }
-            }
+        let rv: Box<dyn Iterator<Item = u64>> = if pos == 0 {
+            Box::new(std::iter::once(value))
+        } else if use_concat {
+            Box::new(
+                self.find_combinations(use_concat, pos - 1)
+                    .flat_map(move |prev| [prev + value, prev * value, concat(prev, value)]),
+            )
+        } else {
+            Box::new(
+                self.find_combinations(use_concat, pos - 1)
+                    .flat_map(move |prev| [prev + value, prev * value]),
+            )
+        };
 
-            total
-        })
+        rv
     }
 
-    fn is_possible(&self, operators: u64) -> bool {
-        self.combinations(operators).any(|c| c == self.target)
+    fn combinations(&self, use_concat: bool) -> impl Iterator<Item = u64> + use<'_> {
+        self.find_combinations(use_concat, self.values.len() - 1)
+    }
+
+    fn is_possible(&self, use_concat: bool) -> bool {
+        self.combinations(use_concat).any(|c| c == self.target)
     }
 }
 
@@ -77,7 +85,7 @@ pub fn part_one(input: &str) -> Option<u64> {
             .lines()
             .filter_map(|line| {
                 CalibrationValue::from_str(line).map_or(None, |cv| {
-                    Some(if cv.is_possible(2) { cv.target } else { 0 })
+                    Some(if cv.is_possible(false) { cv.target } else { 0 })
                 })
             })
             .sum(),
@@ -91,7 +99,7 @@ pub fn part_two(input: &str) -> Option<u64> {
             .lines()
             .filter_map(|line| {
                 CalibrationValue::from_str(line).map_or(None, |cv| {
-                    Some(if cv.is_possible(3) { cv.target } else { 0 })
+                    Some(if cv.is_possible(true) { cv.target } else { 0 })
                 })
             })
             .sum(),
@@ -147,27 +155,27 @@ mod tests {
     fn test_combinations() {
         let values = example_calibration_values();
         assert_eq!(
-            values[0].combinations(2).collect::<Vec<u64>>(),
-            vec![190, 29]
+            values[0].combinations(false).collect::<Vec<u64>>(),
+            vec![29, 190]
         );
         assert_eq!(
-            values[1].combinations(2).collect::<Vec<u64>>(),
-            vec![87480, 3267, 3267, 148]
+            values[1].combinations(false).collect::<Vec<u64>>(),
+            vec![148, 3267, 3267, 87480]
         );
     }
 
     #[test]
     fn test_is_possible() {
         let values = example_calibration_values();
-        assert_eq!(values[0].is_possible(2), true);
-        assert_eq!(values[1].is_possible(2), true);
-        assert_eq!(values[2].is_possible(2), false);
-        assert_eq!(values[3].is_possible(2), false);
-        assert_eq!(values[4].is_possible(2), false);
-        assert_eq!(values[5].is_possible(2), false);
-        assert_eq!(values[6].is_possible(2), false);
-        assert_eq!(values[7].is_possible(2), false);
-        assert_eq!(values[8].is_possible(2), true);
+        assert_eq!(values[0].is_possible(false), true);
+        assert_eq!(values[1].is_possible(false), true);
+        assert_eq!(values[2].is_possible(false), false);
+        assert_eq!(values[3].is_possible(false), false);
+        assert_eq!(values[4].is_possible(false), false);
+        assert_eq!(values[5].is_possible(false), false);
+        assert_eq!(values[6].is_possible(false), false);
+        assert_eq!(values[7].is_possible(false), false);
+        assert_eq!(values[8].is_possible(false), true);
     }
 
     #[test]
@@ -198,27 +206,27 @@ mod tests {
     fn test_combinations_with_concat() {
         let values = example_calibration_values();
         assert_eq!(
-            values[0].combinations(3).collect::<Vec<u64>>(),
-            vec![190, 29, 1019],
+            values[0].combinations(true).collect::<Vec<u64>>(),
+            vec![29, 190, 1019],
         );
         assert_eq!(
-            values[1].combinations(3).collect::<Vec<u64>>(),
-            vec![87480, 3267, 219780, 3267, 148, 8167, 324027, 12127, 814027],
+            values[1].combinations(true).collect::<Vec<u64>>(),
+            vec![148, 3267, 12127, 3267, 87480, 324027, 8167, 219780, 814027],
         );
     }
 
     #[test]
     fn test_is_possible_with_concat() {
         let values = example_calibration_values();
-        assert_eq!(values[0].is_possible(3), true);
-        assert_eq!(values[1].is_possible(3), true);
-        assert_eq!(values[2].is_possible(3), false);
-        assert_eq!(values[3].is_possible(3), true);
-        assert_eq!(values[4].is_possible(3), true);
-        assert_eq!(values[5].is_possible(3), false);
-        assert_eq!(values[6].is_possible(3), true);
-        assert_eq!(values[7].is_possible(3), false);
-        assert_eq!(values[8].is_possible(3), true);
+        assert_eq!(values[0].is_possible(true), true);
+        assert_eq!(values[1].is_possible(true), true);
+        assert_eq!(values[2].is_possible(true), false);
+        assert_eq!(values[3].is_possible(true), true);
+        assert_eq!(values[4].is_possible(true), true);
+        assert_eq!(values[5].is_possible(true), false);
+        assert_eq!(values[6].is_possible(true), true);
+        assert_eq!(values[7].is_possible(true), false);
+        assert_eq!(values[8].is_possible(true), true);
     }
 
     #[test]
