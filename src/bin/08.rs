@@ -8,11 +8,7 @@ const fn out_of_bounds(value: i32, max: i32) -> bool {
     value < 0 || value > max
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct Position {
-    x: i32,
-    y: i32,
-}
+type Position = (i32, i32);
 
 #[derive(Debug, PartialEq)]
 struct Antenna {
@@ -28,11 +24,11 @@ struct Line {
 
 impl Line {
     fn all_points(&self, max_x: i32, max_y: i32) -> impl Iterator<Item = Position> {
-        let delta_x = self.finish.x - self.start.x;
-        let delta_y = self.finish.y - self.start.y;
+        let delta_x = self.finish.0 - self.start.0;
+        let delta_y = self.finish.1 - self.start.1;
 
-        let mut start_x = self.start.x;
-        let mut start_y = self.start.y;
+        let mut start_x = self.start.0;
+        let mut start_y = self.start.1;
         loop {
             let candidate_x = start_x - delta_x;
             let candidate_y = start_y - delta_y;
@@ -59,30 +55,30 @@ impl Line {
                 Some(y)
             }
         });
-        x_values.zip(y_values).map(|(x, y)| Position { x, y })
+        x_values.zip(y_values)
     }
 
     const fn corners(&self, max_x: i32, max_y: i32) -> (Option<Position>, Option<Position>) {
-        let delta_x = self.finish.x - self.start.x;
-        let delta_y = self.finish.y - self.start.y;
+        let delta_x = self.finish.0 - self.start.0;
+        let delta_y = self.finish.1 - self.start.1;
 
         let bottom_left = {
-            let x = self.start.x - delta_x;
-            let y = self.start.y - delta_y;
+            let x = self.start.0 - delta_x;
+            let y = self.start.1 - delta_y;
             if out_of_bounds(x, max_x) || out_of_bounds(y, max_y) {
                 None
             } else {
-                Some(Position { x, y })
+                Some((x, y))
             }
         };
 
         let top_right = {
-            let x = self.finish.x + delta_x;
-            let y = self.finish.y + delta_y;
+            let x = self.finish.0 + delta_x;
+            let y = self.finish.1 + delta_y;
             if out_of_bounds(x, max_x) || out_of_bounds(y, max_y) {
                 None
             } else {
-                Some(Position { x, y })
+                Some((x, y))
             }
         };
 
@@ -153,7 +149,7 @@ impl FromStr for City {
                 max_x = x.max(max_x);
                 if frequency != '.' {
                     antennae.push(Antenna {
-                        position: Position { x, y },
+                        position: (x, y),
                         frequency,
                     });
                 }
@@ -186,31 +182,31 @@ mod tests {
         City {
             antennae: vec![
                 Antenna {
-                    position: Position { x: 8, y: 1 },
+                    position: (8, 1),
                     frequency: '0',
                 },
                 Antenna {
-                    position: Position { x: 5, y: 2 },
+                    position: (5, 2),
                     frequency: '0',
                 },
                 Antenna {
-                    position: Position { x: 7, y: 3 },
+                    position: (7, 3),
                     frequency: '0',
                 },
                 Antenna {
-                    position: Position { x: 4, y: 4 },
+                    position: (4, 4),
                     frequency: '0',
                 },
                 Antenna {
-                    position: Position { x: 6, y: 5 },
+                    position: (6, 5),
                     frequency: 'A',
                 },
                 Antenna {
-                    position: Position { x: 8, y: 8 },
+                    position: (8, 8),
                     frequency: 'A',
                 },
                 Antenna {
-                    position: Position { x: 9, y: 9 },
+                    position: (9, 9),
                     frequency: 'A',
                 },
             ],
@@ -230,21 +226,20 @@ mod tests {
     #[test]
     fn test_antinodes() {
         let mut expected = BTreeSet::new();
-        expected.insert(Position { x: 6, y: 0 });
-        expected.insert(Position { x: 11, y: 0 });
-        expected.insert(Position { x: 3, y: 1 });
-        expected.insert(Position { x: 4, y: 2 });
-        expected.insert(Position { x: 10, y: 2 });
-        expected.insert(Position { x: 2, y: 3 });
-        expected.insert(Position { x: 9, y: 4 });
-        expected.insert(Position { x: 1, y: 5 });
-        expected.insert(Position { x: 6, y: 5 });
-        expected.insert(Position { x: 3, y: 6 });
-        expected.insert(Position { x: 0, y: 7 });
-        expected.insert(Position { x: 7, y: 7 });
-        expected.insert(Position { x: 10, y: 10 });
-        expected.insert(Position { x: 10, y: 11 });
-
+        expected.insert((6, 0));
+        expected.insert((11, 0));
+        expected.insert((3, 1));
+        expected.insert((4, 2));
+        expected.insert((10, 2));
+        expected.insert((2, 3));
+        expected.insert((9, 4));
+        expected.insert((1, 5));
+        expected.insert((6, 5));
+        expected.insert((3, 6));
+        expected.insert((0, 7));
+        expected.insert((7, 7));
+        expected.insert((10, 10));
+        expected.insert((10, 11));
         assert_eq!(example_city().antinode_locations(true), expected);
     }
 
@@ -257,41 +252,40 @@ mod tests {
     #[test]
     fn test_antinodes_full_line() {
         let mut expected = BTreeSet::new();
-        expected.insert(Position { x: 0, y: 0 });
-        expected.insert(Position { x: 1, y: 0 });
-        expected.insert(Position { x: 6, y: 0 });
-        expected.insert(Position { x: 11, y: 0 });
-        expected.insert(Position { x: 1, y: 1 });
-        expected.insert(Position { x: 3, y: 1 });
-        expected.insert(Position { x: 8, y: 1 });
-        expected.insert(Position { x: 2, y: 2 });
-        expected.insert(Position { x: 4, y: 2 });
-        expected.insert(Position { x: 5, y: 2 });
-        expected.insert(Position { x: 10, y: 2 });
-        expected.insert(Position { x: 2, y: 3 });
-        expected.insert(Position { x: 3, y: 3 });
-        expected.insert(Position { x: 7, y: 3 });
-        expected.insert(Position { x: 4, y: 4 });
-        expected.insert(Position { x: 9, y: 4 });
-        expected.insert(Position { x: 1, y: 5 });
-        expected.insert(Position { x: 5, y: 5 });
-        expected.insert(Position { x: 6, y: 5 });
-        expected.insert(Position { x: 11, y: 5 });
-        expected.insert(Position { x: 3, y: 6 });
-        expected.insert(Position { x: 6, y: 6 });
-        expected.insert(Position { x: 0, y: 7 });
-        expected.insert(Position { x: 5, y: 7 });
-        expected.insert(Position { x: 7, y: 7 });
-        expected.insert(Position { x: 2, y: 8 });
-        expected.insert(Position { x: 8, y: 8 });
-        expected.insert(Position { x: 4, y: 9 });
-        expected.insert(Position { x: 9, y: 9 });
-        expected.insert(Position { x: 1, y: 10 });
-        expected.insert(Position { x: 10, y: 10 });
-        expected.insert(Position { x: 3, y: 11 });
-        expected.insert(Position { x: 10, y: 11 });
-        expected.insert(Position { x: 11, y: 11 });
-
+        expected.insert((0, 0));
+        expected.insert((1, 0));
+        expected.insert((6, 0));
+        expected.insert((11, 0));
+        expected.insert((1, 1));
+        expected.insert((3, 1));
+        expected.insert((8, 1));
+        expected.insert((2, 2));
+        expected.insert((4, 2));
+        expected.insert((5, 2));
+        expected.insert((10, 2));
+        expected.insert((2, 3));
+        expected.insert((3, 3));
+        expected.insert((7, 3));
+        expected.insert((4, 4));
+        expected.insert((9, 4));
+        expected.insert((1, 5));
+        expected.insert((5, 5));
+        expected.insert((6, 5));
+        expected.insert((11, 5));
+        expected.insert((3, 6));
+        expected.insert((6, 6));
+        expected.insert((0, 7));
+        expected.insert((5, 7));
+        expected.insert((7, 7));
+        expected.insert((2, 8));
+        expected.insert((8, 8));
+        expected.insert((4, 9));
+        expected.insert((9, 9));
+        expected.insert((1, 10));
+        expected.insert((10, 10));
+        expected.insert((3, 11));
+        expected.insert((10, 11));
+        expected.insert((11, 11));
         assert_eq!(example_city().antinode_locations(false), expected);
     }
 
