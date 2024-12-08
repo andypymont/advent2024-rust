@@ -1,86 +1,17 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::ops::{Mul, Sub};
+use std::collections::BTreeSet;
+use std::iter::successors;
 use std::str::FromStr;
 
 advent_of_code::solution!(8);
 
-const fn gcd(a: i32, b: i32) -> i32 {
-    let mut a = a;
-    let mut b = b;
-
-    if a == 0 || b == 0 {
-        a | b
-    } else {
-        let shift = (a | b).trailing_zeros();
-
-        a >>= a.trailing_zeros();
-        b >>= b.trailing_zeros();
-
-        while a != b {
-            if a > b {
-                a -= b;
-                a >>= a.trailing_zeros();
-            } else {
-                b -= a;
-                b >>= b.trailing_zeros();
-            }
-        }
-
-        a << shift
-    }
+const fn out_of_bounds(value: i32, max: i32) -> bool {
+    value < 0 || value > max
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct Position {
     x: i32,
     y: i32,
-}
-
-impl Position {
-    const fn gradient(self) -> Self {
-        if self.x == 0 || self.y == 0 {
-            return self;
-        }
-
-        let divisor = gcd(self.x.abs(), self.y.abs());
-        Self {
-            x: self.x / divisor,
-            y: self.y / divisor,
-        }
-    }
-
-    const fn halved(self) -> Option<Self> {
-        if self.x % 2 == 0 && self.y % 2 == 0 {
-            Some(Self {
-                x: self.x / 2,
-                y: self.y / 2,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-impl Mul<i32> for Position {
-    type Output = Self;
-
-    fn mul(self, rhs: i32) -> Self::Output {
-        Self {
-            x: self.x * rhs,
-            y: self.y * rhs,
-        }
-    }
-}
-
-impl Sub<Self> for Position {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -90,44 +21,72 @@ struct Antenna {
 }
 
 #[derive(Debug, PartialEq)]
-struct SignalTracker {
-    position: Position,
-    signals: BTreeSet<(Position, char)>,
+struct Line {
+    start: Position,
+    finish: Position,
 }
 
-impl SignalTracker {
-    const fn new(position: Position) -> Self {
-        Self {
-            position,
-            signals: BTreeSet::new(),
+impl Line {
+    fn all_points(&self, max_x: i32, max_y: i32) -> impl Iterator<Item = Position> {
+        let delta_x = self.finish.x - self.start.x;
+        let delta_y = self.finish.y - self.start.y;
+
+        let mut start_x = self.start.x;
+        let mut start_y = self.start.y;
+        loop {
+            let candidate_x = start_x - delta_x;
+            let candidate_y = start_y - delta_y;
+            if out_of_bounds(candidate_x, max_x) || out_of_bounds(candidate_y, max_y) {
+                break;
+            }
+            start_x = candidate_x;
+            start_y = candidate_y;
         }
+
+        let x_values = successors(Some(start_x), move |x| {
+            let x = x + delta_x;
+            if out_of_bounds(x, max_x) {
+                None
+            } else {
+                Some(x)
+            }
+        });
+        let y_values = successors(Some(start_y), move |y| {
+            let y = y + delta_y;
+            if out_of_bounds(y, max_y) {
+                None
+            } else {
+                Some(y)
+            }
+        });
+        x_values.zip(y_values).map(|(x, y)| Position { x, y })
     }
 
-    fn contains(&self, gradient: Position, frequency: char) -> bool {
-        if self.signals.contains(&(gradient, frequency)) {
-            return true;
-        }
+    const fn corners(&self, max_x: i32, max_y: i32) -> (Option<Position>, Option<Position>) {
+        let delta_x = self.finish.x - self.start.x;
+        let delta_y = self.finish.y - self.start.y;
 
-        if self.signals.contains(&(Position { x: 0, y: 0 }, frequency)) {
-            return true;
-        }
+        let bottom_left = {
+            let x = self.start.x - delta_x;
+            let y = self.start.y - delta_y;
+            if out_of_bounds(x, max_x) || out_of_bounds(y, max_y) {
+                None
+            } else {
+                Some(Position { x, y })
+            }
+        };
 
-        if gradient == (Position { x: 0, y: 0 }) {
-            return self.signals.iter().any(|(_g, f)| *f == frequency);
-        }
+        let top_right = {
+            let x = self.finish.x + delta_x;
+            let y = self.finish.y + delta_y;
+            if out_of_bounds(x, max_x) || out_of_bounds(y, max_y) {
+                None
+            } else {
+                Some(Position { x, y })
+            }
+        };
 
-        false
-    }
-
-    fn insert(&mut self, antenna: &Antenna) -> bool {
-        let gradient = (antenna.position - self.position).gradient();
-
-        if self.contains(gradient, antenna.frequency) {
-            return true;
-        }
-
-        self.signals.insert((gradient, antenna.frequency));
-        false
+        (bottom_left, top_right)
     }
 }
 
@@ -139,46 +98,41 @@ struct City {
 }
 
 impl City {
-    fn antinode_at(&self, position: Position) -> bool {
-        let mut signals = BTreeMap::new();
+    fn antinode_locations(&self, extend: bool) -> BTreeSet<Position> {
+        let mut antinodes = BTreeSet::new();
 
-        self.antennae.iter().any(|antenna| {
-            let antenna_pos = antenna.position - position;
-
-            if let Some(other_freq) = signals.get(&(antenna_pos * 2)) {
-                if *other_freq == antenna.frequency {
-                    return true;
+        for (ix, start) in self.antennae.iter().enumerate() {
+            for finish in &self.antennae[(ix + 1)..] {
+                if start.frequency != finish.frequency {
+                    continue;
                 }
-            }
-            if let Some(halved) = antenna_pos.halved() {
-                if let Some(other_freq) = signals.get(&halved) {
-                    if *other_freq == antenna.frequency {
-                        return true;
+
+                let line = Line {
+                    start: start.position,
+                    finish: finish.position,
+                };
+
+                if extend {
+                    let (a, b) = line.corners(self.max_x, self.max_y);
+                    if let Some(a) = a {
+                        antinodes.insert(a);
                     }
+                    if let Some(b) = b {
+                        antinodes.insert(b);
+                    }
+                } else {
+                    line.all_points(self.max_x, self.max_y).for_each(|a| {
+                        antinodes.insert(a);
+                    });
                 }
             }
+        }
 
-            signals.insert(antenna_pos, antenna.frequency);
-            false
-        })
-    }
-
-    fn any_distance_antinode_at(&self, position: Position) -> bool {
-        let mut signals = SignalTracker::new(position);
-        self.antennae.iter().any(|antenna| signals.insert(antenna))
+        antinodes
     }
 
     fn antinode_count(&self, allow_any_distance: bool) -> usize {
-        (0..=self.max_x)
-            .flat_map(|y| (0..=self.max_y).map(move |x| Position { x, y }))
-            .filter(|pos| {
-                if allow_any_distance {
-                    self.any_distance_antinode_at(*pos)
-                } else {
-                    self.antinode_at(*pos)
-                }
-            })
-            .count()
+        self.antinode_locations(!allow_any_distance).len()
     }
 }
 
@@ -274,28 +228,24 @@ mod tests {
     }
 
     #[test]
-    fn test_antinode_at() {
-        let city = example_city();
+    fn test_antinodes() {
+        let mut expected = BTreeSet::new();
+        expected.insert(Position { x: 6, y: 0 });
+        expected.insert(Position { x: 11, y: 0 });
+        expected.insert(Position { x: 3, y: 1 });
+        expected.insert(Position { x: 4, y: 2 });
+        expected.insert(Position { x: 10, y: 2 });
+        expected.insert(Position { x: 2, y: 3 });
+        expected.insert(Position { x: 9, y: 4 });
+        expected.insert(Position { x: 1, y: 5 });
+        expected.insert(Position { x: 6, y: 5 });
+        expected.insert(Position { x: 3, y: 6 });
+        expected.insert(Position { x: 0, y: 7 });
+        expected.insert(Position { x: 7, y: 7 });
+        expected.insert(Position { x: 10, y: 10 });
+        expected.insert(Position { x: 10, y: 11 });
 
-        assert_eq!(city.antinode_at(Position { x: 6, y: 0 }), true);
-        assert_eq!(city.antinode_at(Position { x: 11, y: 0 }), true);
-        assert_eq!(city.antinode_at(Position { x: 3, y: 1 }), true);
-        assert_eq!(city.antinode_at(Position { x: 4, y: 2 }), true);
-        assert_eq!(city.antinode_at(Position { x: 2, y: 3 }), true);
-        assert_eq!(city.antinode_at(Position { x: 9, y: 4 }), true);
-        assert_eq!(city.antinode_at(Position { x: 1, y: 5 }), true);
-        assert_eq!(city.antinode_at(Position { x: 6, y: 5 }), true);
-        assert_eq!(city.antinode_at(Position { x: 3, y: 6 }), true);
-        assert_eq!(city.antinode_at(Position { x: 0, y: 7 }), true);
-        assert_eq!(city.antinode_at(Position { x: 7, y: 7 }), true);
-        assert_eq!(city.antinode_at(Position { x: 10, y: 10 }), true);
-        assert_eq!(city.antinode_at(Position { x: 10, y: 11 }), true);
-
-        assert_eq!(city.antinode_at(Position { x: 0, y: 0 }), false);
-        assert_eq!(city.antinode_at(Position { x: 5, y: 0 }), false);
-        assert_eq!(city.antinode_at(Position { x: 2, y: 4 }), false);
-        assert_eq!(city.antinode_at(Position { x: 5, y: 7 }), false);
-        assert_eq!(city.antinode_at(Position { x: 9, y: 10 }), false);
+        assert_eq!(example_city().antinode_locations(true), expected);
     }
 
     #[test]
@@ -305,63 +255,44 @@ mod tests {
     }
 
     #[test]
-    fn test_any_distance_antinode_at() {
-        let city = example_city();
+    fn test_antinodes_full_line() {
+        let mut expected = BTreeSet::new();
+        expected.insert(Position { x: 0, y: 0 });
+        expected.insert(Position { x: 1, y: 0 });
+        expected.insert(Position { x: 6, y: 0 });
+        expected.insert(Position { x: 11, y: 0 });
+        expected.insert(Position { x: 1, y: 1 });
+        expected.insert(Position { x: 3, y: 1 });
+        expected.insert(Position { x: 8, y: 1 });
+        expected.insert(Position { x: 2, y: 2 });
+        expected.insert(Position { x: 4, y: 2 });
+        expected.insert(Position { x: 5, y: 2 });
+        expected.insert(Position { x: 10, y: 2 });
+        expected.insert(Position { x: 2, y: 3 });
+        expected.insert(Position { x: 3, y: 3 });
+        expected.insert(Position { x: 7, y: 3 });
+        expected.insert(Position { x: 4, y: 4 });
+        expected.insert(Position { x: 9, y: 4 });
+        expected.insert(Position { x: 1, y: 5 });
+        expected.insert(Position { x: 5, y: 5 });
+        expected.insert(Position { x: 6, y: 5 });
+        expected.insert(Position { x: 11, y: 5 });
+        expected.insert(Position { x: 3, y: 6 });
+        expected.insert(Position { x: 6, y: 6 });
+        expected.insert(Position { x: 0, y: 7 });
+        expected.insert(Position { x: 5, y: 7 });
+        expected.insert(Position { x: 7, y: 7 });
+        expected.insert(Position { x: 2, y: 8 });
+        expected.insert(Position { x: 8, y: 8 });
+        expected.insert(Position { x: 4, y: 9 });
+        expected.insert(Position { x: 9, y: 9 });
+        expected.insert(Position { x: 1, y: 10 });
+        expected.insert(Position { x: 10, y: 10 });
+        expected.insert(Position { x: 3, y: 11 });
+        expected.insert(Position { x: 10, y: 11 });
+        expected.insert(Position { x: 11, y: 11 });
 
-        assert_eq!(city.any_distance_antinode_at(Position { x: 0, y: 0 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 1, y: 0 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 6, y: 0 }), true);
-        assert_eq!(
-            city.any_distance_antinode_at(Position { x: 11, y: 0 }),
-            true
-        );
-        assert_eq!(city.any_distance_antinode_at(Position { x: 1, y: 1 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 3, y: 1 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 8, y: 1 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 2, y: 2 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 4, y: 2 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 5, y: 2 }), true);
-        assert_eq!(
-            city.any_distance_antinode_at(Position { x: 10, y: 2 }),
-            true
-        );
-        assert_eq!(city.any_distance_antinode_at(Position { x: 2, y: 3 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 3, y: 3 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 7, y: 3 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 4, y: 4 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 9, y: 4 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 1, y: 5 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 5, y: 5 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 6, y: 5 }), true);
-        assert_eq!(
-            city.any_distance_antinode_at(Position { x: 11, y: 5 }),
-            true
-        );
-        assert_eq!(city.any_distance_antinode_at(Position { x: 3, y: 6 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 6, y: 6 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 0, y: 7 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 5, y: 7 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 7, y: 7 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 2, y: 8 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 8, y: 8 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 4, y: 9 }), true);
-        assert_eq!(city.any_distance_antinode_at(Position { x: 9, y: 9 }), true);
-        assert_eq!(
-            city.any_distance_antinode_at(Position { x: 1, y: 10 }),
-            true
-        );
-        assert_eq!(
-            city.any_distance_antinode_at(Position { x: 10, y: 10 }),
-            true
-        );
-        assert_eq!(
-            city.any_distance_antinode_at(Position { x: 10, y: 11 }),
-            true
-        );
-        assert_eq!(
-            city.any_distance_antinode_at(Position { x: 11, y: 11 }),
-            true
-        );
+        assert_eq!(example_city().antinode_locations(false), expected);
     }
 
     #[test]
