@@ -4,86 +4,12 @@ use std::str::FromStr;
 
 advent_of_code::solution!(8);
 
-const fn out_of_bounds(value: i32, max: i32) -> bool {
-    value < 0 || value > max
-}
-
 type Position = (i32, i32);
 
 #[derive(Debug, PartialEq)]
 struct Antenna {
     position: Position,
     frequency: char,
-}
-
-#[derive(Debug, PartialEq)]
-struct Line {
-    start: Position,
-    finish: Position,
-}
-
-impl Line {
-    fn all_points(&self, max_x: i32, max_y: i32) -> impl Iterator<Item = Position> {
-        let delta_x = self.finish.0 - self.start.0;
-        let delta_y = self.finish.1 - self.start.1;
-
-        let mut start_x = self.start.0;
-        let mut start_y = self.start.1;
-        loop {
-            let candidate_x = start_x - delta_x;
-            let candidate_y = start_y - delta_y;
-            if out_of_bounds(candidate_x, max_x) || out_of_bounds(candidate_y, max_y) {
-                break;
-            }
-            start_x = candidate_x;
-            start_y = candidate_y;
-        }
-
-        let x_values = successors(Some(start_x), move |x| {
-            let x = x + delta_x;
-            if out_of_bounds(x, max_x) {
-                None
-            } else {
-                Some(x)
-            }
-        });
-        let y_values = successors(Some(start_y), move |y| {
-            let y = y + delta_y;
-            if out_of_bounds(y, max_y) {
-                None
-            } else {
-                Some(y)
-            }
-        });
-        x_values.zip(y_values)
-    }
-
-    const fn corners(&self, max_x: i32, max_y: i32) -> (Option<Position>, Option<Position>) {
-        let delta_x = self.finish.0 - self.start.0;
-        let delta_y = self.finish.1 - self.start.1;
-
-        let bottom_left = {
-            let x = self.start.0 - delta_x;
-            let y = self.start.1 - delta_y;
-            if out_of_bounds(x, max_x) || out_of_bounds(y, max_y) {
-                None
-            } else {
-                Some((x, y))
-            }
-        };
-
-        let top_right = {
-            let x = self.finish.0 + delta_x;
-            let y = self.finish.1 + delta_y;
-            if out_of_bounds(x, max_x) || out_of_bounds(y, max_y) {
-                None
-            } else {
-                Some((x, y))
-            }
-        };
-
-        (bottom_left, top_right)
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -103,13 +29,8 @@ impl City {
                     continue;
                 }
 
-                let line = Line {
-                    start: start.position,
-                    finish: finish.position,
-                };
-
                 if extend {
-                    let (a, b) = line.corners(self.max_x, self.max_y);
+                    let (a, b) = self.line_corners(start.position, finish.position);
                     if let Some(a) = a {
                         antinodes.insert(a);
                     }
@@ -117,9 +38,10 @@ impl City {
                         antinodes.insert(b);
                     }
                 } else {
-                    line.all_points(self.max_x, self.max_y).for_each(|a| {
-                        antinodes.insert(a);
-                    });
+                    self.line_points(start.position, finish.position)
+                        .for_each(|a| {
+                            antinodes.insert(a);
+                        });
                 }
             }
         }
@@ -129,6 +51,80 @@ impl City {
 
     fn antinode_count(&self, allow_any_distance: bool) -> usize {
         self.antinode_locations(!allow_any_distance).len()
+    }
+
+    const fn line_corners(
+        &self,
+        start: Position,
+        finish: Position,
+    ) -> (Option<Position>, Option<Position>) {
+        let delta_x = finish.0 - start.0;
+        let delta_y = finish.1 - start.1;
+
+        let bottom_left = {
+            let x = start.0 - delta_x;
+            let y = start.1 - delta_y;
+            if x < 0 || x > self.max_x || y < 0 || y > self.max_y {
+                None
+            } else {
+                Some((x, y))
+            }
+        };
+
+        let top_right = {
+            let x = finish.0 + delta_x;
+            let y = finish.1 + delta_y;
+            if x < 0 || x > self.max_x || y < 0 || y > self.max_y {
+                None
+            } else {
+                Some((x, y))
+            }
+        };
+
+        (bottom_left, top_right)
+    }
+
+    fn line_points(
+        &self,
+        start: Position,
+        finish: Position,
+    ) -> impl Iterator<Item = Position> + use<'_> {
+        let delta_x = finish.0 - start.0;
+        let delta_y = finish.1 - start.1;
+
+        let mut start_x = start.0;
+        let mut start_y = start.1;
+        loop {
+            let candidate_x = start_x - delta_x;
+            let candidate_y = start_y - delta_y;
+            if candidate_x < 0
+                || candidate_x > self.max_x
+                || candidate_y < 0
+                || candidate_y > self.max_y
+            {
+                break;
+            }
+            start_x = candidate_x;
+            start_y = candidate_y;
+        }
+
+        let x_values = successors(Some(start_x), move |x| {
+            let x = x + delta_x;
+            if x < 0 || x > self.max_x {
+                None
+            } else {
+                Some(x)
+            }
+        });
+        let y_values = successors(Some(start_y), move |y| {
+            let y = y + delta_y;
+            if y < 0 || y > self.max_y {
+                None
+            } else {
+                Some(y)
+            }
+        });
+        x_values.zip(y_values)
     }
 }
 
