@@ -1,4 +1,4 @@
-use std::ops::RangeInclusive;
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 advent_of_code::solution!(9);
@@ -37,82 +37,98 @@ impl HardDrive {
             }
         }
     }
+}
 
-    fn defrag_whole_files(&mut self) {
-        let mut next_id = self.contents.iter().filter_map(|content| *content).max();
+#[derive(Debug, PartialEq)]
+struct File {
+    id: usize,
+    start: usize,
+    length: usize,
+}
 
-        while let Some(id) = next_id {
-            let Some(source) = self.find_file(id) else {
-                continue;
-            };
-            let length = 1 + source.end() - source.start();
+impl File {
+    fn checksum(&self) -> usize {
+        (self.start..(self.start + self.length))
+            .map(|pos| pos * self.id)
+            .sum()
+    }
+}
 
-            if let Some(dest) = self.find_first_gap(length) {
-                if dest.start() < source.start() {
-                    self.contents[source].iter_mut().for_each(|c| *c = None);
-                    self.contents[dest].iter_mut().for_each(|c| *c = Some(id));
-                }
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct Space {
+    start: usize,
+    length: usize,
+}
+
+impl Space {
+    const fn overlaps(&self, other: Self) -> bool {
+        !(other.start > self.start + self.length || other.start + other.length < self.start)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct FileSystem {
+    files: Vec<File>,
+    spaces: BTreeSet<Space>,
+}
+
+impl FileSystem {
+    fn find_space(&self, length: usize, before: usize) -> Option<Space> {
+        self.spaces
+            .iter()
+            .find(|s| s.length >= length && s.start < before)
+            .copied()
+    }
+
+    fn allocate(&mut self, length: usize, before: usize) -> Option<usize> {
+        let space = self.find_space(length, before)?;
+        self.spaces.remove(&space);
+        let remaining = space.length.saturating_sub(length);
+        if remaining > 0 {
+            self.spaces.insert(Space {
+                start: space.start + length,
+                length: remaining,
+            });
+        }
+        Some(space.start)
+    }
+
+    fn checksum(&self) -> usize {
+        self.files.iter().map(File::checksum).sum()
+    }
+
+    fn defrag(&mut self) {
+        for ix in (0..self.files.len()).rev() {
+            let length = self.files[ix].length;
+            if let Some(start) = self.allocate(length, self.files[ix].start) {
+                self.free(Space {
+                    start: self.files[ix].start,
+                    length: self.files[ix].length,
+                });
+                self.files[ix].start = start;
             }
-
-            next_id = id.checked_sub(1);
         }
     }
 
-    fn find_file(&self, id: usize) -> Option<RangeInclusive<usize>> {
-        let mut start = None;
-        let mut finish = 0;
+    fn free(&mut self, space: Space) {
+        let mut start = space.start;
+        let mut end = space.start + space.length;
 
-        for (ix, file) in self.contents.iter().enumerate() {
-            match start {
-                None => {
-                    if file == &Some(id) {
-                        start = Some(ix);
-                        finish = ix;
-                    }
-                }
-                Some(_) => {
-                    if file == &Some(id) {
-                        finish = ix;
-                    } else {
-                        break;
-                    }
-                }
+        for other in self.spaces.clone() {
+            if other.start > end {
+                break;
+            }
+            if space.overlaps(other) {
+                start = start.min(other.start);
+                end = end.max(other.start + other.length);
+                self.spaces.remove(&other);
             }
         }
 
-        let start = start?;
-        Some(RangeInclusive::new(start, finish))
-    }
-
-    fn find_first_gap(&self, length: usize) -> Option<RangeInclusive<usize>> {
-        let mut start = None;
-        let mut finish = 0;
-
-        for (ix, file) in self.contents.iter().enumerate() {
-            match start {
-                None => {
-                    if file.is_none() {
-                        start = Some(ix);
-                        finish = ix;
-                    }
-                }
-                Some(_) => {
-                    if file.is_none() {
-                        finish = ix;
-                    } else {
-                        start = None;
-                    }
-                }
-            }
-            if let Some(s) = start {
-                if 1 + finish - s == length {
-                    break;
-                }
-            }
-        }
-
-        let start = start?;
-        Some(RangeInclusive::new(start, finish))
+        self.spaces.insert(Space {
+            start,
+            length: end - start,
+        });
     }
 }
 
@@ -149,6 +165,35 @@ impl FromStr for HardDrive {
     }
 }
 
+impl FromStr for FileSystem {
+    type Err = ParseHardDriveError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let mut files = Vec::new();
+        let mut spaces = BTreeSet::new();
+        let mut id = 0;
+        let mut start = 0;
+
+        for (ix, ch) in input.trim().chars().enumerate() {
+            let length = parse_digit(ch)?;
+            if length == 0 {
+                continue;
+            }
+
+            if ix % 2 == 0 {
+                files.push(File { id, start, length });
+                id += 1;
+            } else {
+                spaces.insert(Space { start, length });
+            }
+
+            start += length;
+        }
+
+        Ok(Self { files, spaces })
+    }
+}
+
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
     HardDrive::from_str(input).map_or(None, |mut drive| {
@@ -159,9 +204,9 @@ pub fn part_one(input: &str) -> Option<usize> {
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    HardDrive::from_str(input).map_or(None, |mut drive| {
-        drive.defrag_whole_files();
-        Some(drive.checksum())
+    FileSystem::from_str(input).map_or(None, |mut fs| {
+        fs.defrag();
+        Some(fs.checksum())
     })
 }
 
@@ -279,87 +324,194 @@ mod tests {
         assert_eq!(result, Some(1928));
     }
 
-    fn example_hard_drive_defragged_whole_files() -> HardDrive {
-        HardDrive {
-            contents: vec![
-                Some(0),
-                Some(0),
-                Some(9),
-                Some(9),
-                Some(2),
-                Some(1),
-                Some(1),
-                Some(1),
-                Some(7),
-                Some(7),
-                Some(7),
-                None,
-                Some(4),
-                Some(4),
-                None,
-                Some(3),
-                Some(3),
-                Some(3),
-                None,
-                None,
-                None,
-                None,
-                Some(5),
-                Some(5),
-                Some(5),
-                Some(5),
-                None,
-                Some(6),
-                Some(6),
-                Some(6),
-                Some(6),
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(8),
-                Some(8),
-                Some(8),
-                Some(8),
-                None,
-                None,
+    fn example_file_system() -> FileSystem {
+        let mut spaces = BTreeSet::new();
+        spaces.insert(Space {
+            start: 2,
+            length: 3,
+        });
+        spaces.insert(Space {
+            start: 8,
+            length: 3,
+        });
+        spaces.insert(Space {
+            start: 12,
+            length: 3,
+        });
+        spaces.insert(Space {
+            start: 18,
+            length: 1,
+        });
+        spaces.insert(Space {
+            start: 21,
+            length: 1,
+        });
+        spaces.insert(Space {
+            start: 26,
+            length: 1,
+        });
+        spaces.insert(Space {
+            start: 31,
+            length: 1,
+        });
+        spaces.insert(Space {
+            start: 35,
+            length: 1,
+        });
+        FileSystem {
+            files: vec![
+                File {
+                    id: 0,
+                    start: 0,
+                    length: 2,
+                },
+                File {
+                    id: 1,
+                    start: 5,
+                    length: 3,
+                },
+                File {
+                    id: 2,
+                    start: 11,
+                    length: 1,
+                },
+                File {
+                    id: 3,
+                    start: 15,
+                    length: 3,
+                },
+                File {
+                    id: 4,
+                    start: 19,
+                    length: 2,
+                },
+                File {
+                    id: 5,
+                    start: 22,
+                    length: 4,
+                },
+                File {
+                    id: 6,
+                    start: 27,
+                    length: 4,
+                },
+                File {
+                    id: 7,
+                    start: 32,
+                    length: 3,
+                },
+                File {
+                    id: 8,
+                    start: 36,
+                    length: 4,
+                },
+                File {
+                    id: 9,
+                    start: 40,
+                    length: 2,
+                },
             ],
+            spaces,
+        }
+    }
+
+    fn example_file_system_defragged() -> FileSystem {
+        let mut spaces = BTreeSet::new();
+        spaces.insert(Space {
+            start: 11,
+            length: 1,
+        });
+        spaces.insert(Space {
+            start: 14,
+            length: 1,
+        });
+        spaces.insert(Space {
+            start: 18,
+            length: 4,
+        });
+        spaces.insert(Space {
+            start: 26,
+            length: 1,
+        });
+        spaces.insert(Space {
+            start: 31,
+            length: 5,
+        });
+        spaces.insert(Space {
+            start: 40,
+            length: 2,
+        });
+
+        FileSystem {
+            files: vec![
+                File {
+                    id: 0,
+                    start: 0,
+                    length: 2,
+                },
+                File {
+                    id: 1,
+                    start: 5,
+                    length: 3,
+                },
+                File {
+                    id: 2,
+                    start: 4,
+                    length: 1,
+                },
+                File {
+                    id: 3,
+                    start: 15,
+                    length: 3,
+                },
+                File {
+                    id: 4,
+                    start: 12,
+                    length: 2,
+                },
+                File {
+                    id: 5,
+                    start: 22,
+                    length: 4,
+                },
+                File {
+                    id: 6,
+                    start: 27,
+                    length: 4,
+                },
+                File {
+                    id: 7,
+                    start: 8,
+                    length: 3,
+                },
+                File {
+                    id: 8,
+                    start: 36,
+                    length: 4,
+                },
+                File {
+                    id: 9,
+                    start: 2,
+                    length: 2,
+                },
+            ],
+            spaces,
         }
     }
 
     #[test]
-    fn test_find_file() {
-        let mut hard_drive = example_hard_drive();
-        assert_eq!(hard_drive.find_file(0), Some(RangeInclusive::new(0, 1)));
-        assert_eq!(hard_drive.find_file(1), Some(RangeInclusive::new(5, 7)));
-        assert_eq!(hard_drive.find_file(7), Some(RangeInclusive::new(32, 34)));
-        assert_eq!(hard_drive.find_file(10), None);
+    fn test_example_file_system_defrag() {
+        let mut file_system = example_file_system();
+        file_system.defrag();
+        assert_eq!(file_system, example_file_system_defragged());
     }
 
     #[test]
-    fn test_find_first_gap() {
-        let mut hard_drive = example_hard_drive();
+    fn test_parse_file_system() {
         assert_eq!(
-            hard_drive.find_first_gap(1),
-            Some(RangeInclusive::new(2, 2))
+            FileSystem::from_str(&advent_of_code::template::read_file("examples", DAY)),
+            Ok(example_file_system()),
         );
-        assert_eq!(
-            hard_drive.find_first_gap(2),
-            Some(RangeInclusive::new(2, 3))
-        );
-        assert_eq!(
-            hard_drive.find_first_gap(3),
-            Some(RangeInclusive::new(2, 4))
-        );
-        assert_eq!(hard_drive.find_first_gap(4), None);
-    }
-
-    #[test]
-    fn test_defrag_whole_files() {
-        let mut hard_drive = example_hard_drive();
-        hard_drive.defrag_whole_files();
-        assert_eq!(hard_drive, example_hard_drive_defragged_whole_files());
     }
 
     #[test]
