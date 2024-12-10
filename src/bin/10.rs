@@ -70,7 +70,7 @@ struct TrailMap {
 }
 
 impl TrailMap {
-    fn total_trail_head_score(&self) -> usize {
+    fn initial_search_queue(&self) -> VecDeque<TrailMapSearchState> {
         let mut queue = VecDeque::new();
         (0..GRID_SIZE).for_each(|row| {
             (0..GRID_SIZE).for_each(|col| {
@@ -83,7 +83,34 @@ impl TrailMap {
                 }
             });
         });
+        queue
+    }
 
+    fn total_trail_head_rating(&self) -> usize {
+        let mut queue = self.initial_search_queue();
+        let mut rating = 0;
+
+        while let Some(state) = queue.pop_front() {
+            let height = self.grid[state.row][state.col];
+
+            if height == Some(9) {
+                rating += 1;
+                continue;
+            }
+
+            let climb = height.map(|h| h + 1);
+            for candidate in state.neighbours() {
+                if self.grid[candidate.row][candidate.col] == climb {
+                    queue.push_back(candidate);
+                }
+            }
+        }
+
+        rating
+    }
+
+    fn total_trail_head_score(&self) -> usize {
+        let mut queue = self.initial_search_queue();
         let mut score = BTreeSet::new();
 
         while let Some(state) = queue.pop_front() {
@@ -147,10 +174,9 @@ pub fn part_one(input: &str) -> Option<usize> {
     TrailMap::from_str(input).map_or(None, |trail_map| Some(trail_map.total_trail_head_score()))
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    TrailMap::from_str(input).map_or(None, |trail_map| Some(trail_map.total_trail_head_rating()))
 }
 
 #[cfg(test)]
@@ -245,6 +271,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(81));
     }
 }
