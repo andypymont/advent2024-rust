@@ -64,16 +64,13 @@ impl SpaceAllocator {
     }
 
     fn find_in_disk_map(&mut self, disk_map: &DiskMap, length: usize) -> Option<(usize, usize)> {
-        let mut found = None;
-
         while self.position < disk_map.records.len() {
             let record = &disk_map.records[self.position];
 
             if record.is_free_space() {
                 if record.length >= length {
-                    found = Some((record.start, record.length));
                     self.position += 1;
-                    break;
+                    return Some((record.start, record.length));
                 }
 
                 self.insert_in_cache(record.start, record.length);
@@ -82,7 +79,7 @@ impl SpaceAllocator {
             self.position += 1;
         }
 
-        found
+        None
     }
 
     fn insert_in_cache(&mut self, pos: usize, length: usize) {
@@ -174,8 +171,7 @@ impl DiskMap {
 
             let start = alloc
                 .next(self, record.length)
-                .unwrap_or(record.start)
-                .min(record.start);
+                .map_or(record.start, |start| start.min(record.start));
             total_checksum += checksum(record.id.unwrap_or(0), start, record.length);
         }
 
