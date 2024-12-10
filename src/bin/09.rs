@@ -1,321 +1,400 @@
-use std::collections::BTreeSet;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::str::FromStr;
 
 advent_of_code::solution!(9);
 
-#[derive(Debug, PartialEq)]
-struct HardDrive {
-    contents: Vec<Option<usize>>,
+fn checksum(id: usize, start: usize, length: usize) -> usize {
+    if id == 0 {
+        return 0;
+    }
+    (start..start + length).fold(0, |sum, pos| sum + (pos * id))
 }
 
-impl HardDrive {
+#[derive(Debug, PartialEq)]
+struct Record {
+    id: Option<usize>,
+    start: usize,
+    length: usize,
+}
+
+impl Record {
     fn checksum(&self) -> usize {
-        self.contents
-            .iter()
-            .enumerate()
-            .map(|(pos, space)| pos * space.unwrap_or(0))
-            .sum()
+        checksum(self.id.unwrap_or(0), self.start, self.length)
     }
 
-    fn defrag(&mut self) {
-        let mut ix = 0;
+    const fn is_file(&self) -> bool {
+        self.id.is_some()
+    }
+
+    const fn is_free_space(&self) -> bool {
+        self.id.is_none()
+    }
+}
+
+#[derive(Debug)]
+struct SpaceAllocator {
+    position: usize,
+    cache: Vec<BinaryHeap<Reverse<usize>>>,
+}
+
+impl SpaceAllocator {
+    fn new() -> Self {
+        let mut cache = Vec::new();
+        for _ in 0..=9 {
+            cache.push(BinaryHeap::new());
+        }
+        Self { position: 0, cache }
+    }
+
+    fn find_leftmost_matching_cache(&self, length: usize) -> Option<usize> {
+        (length..=9)
+            .filter_map(|len| self.cache[len].peek().map(|pos| (len, pos)))
+            .max_by_key(|(_len, pos)| *pos)
+            .map(|(len, _pos)| len)
+    }
+
+    fn find_in_cache(&mut self, length: usize) -> Option<(usize, usize)> {
+        let length = self.find_leftmost_matching_cache(length)?;
+        if let Some(Reverse(pos)) = self.cache[length].pop() {
+            Some((pos, length))
+        } else {
+            None
+        }
+    }
+
+    fn find_in_disk_map(&mut self, disk_map: &DiskMap, length: usize) -> Option<(usize, usize)> {
+        let mut found = None;
+
+        while self.position < disk_map.records.len() {
+            let record = &disk_map.records[self.position];
+
+            if record.is_free_space() {
+                if record.length >= length {
+                    found = Some((record.start, record.length));
+                    self.position += 1;
+                    break;
+                }
+
+                self.insert_in_cache(record.start, record.length);
+            }
+
+            self.position += 1;
+        }
+
+        found
+    }
+
+    fn insert_in_cache(&mut self, pos: usize, length: usize) {
+        if length == 0 {
+            return;
+        }
+        self.cache[length].push(Reverse(pos));
+    }
+
+    fn next(&mut self, disk_map: &DiskMap, length: usize) -> Option<usize> {
+        let (pos, space) = match self.find_in_cache(length) {
+            Some(cached) => cached,
+            None => self.find_in_disk_map(disk_map, length)?,
+        };
+        self.insert_in_cache(pos + length, space - length);
+        Some(pos)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct DiskMap {
+    records: Vec<Record>,
+}
+
+impl DiskMap {
+    fn defragged_checksum(mut self) -> usize {
+        let mut total_checksum = 0;
+
+        // track from the front and back of memory at the same time
+        let mut front = 0;
+        let mut back = self.records.len() - 1;
 
         loop {
-            if ix >= self.contents.len() - 1 {
+            if front == self.records.len() {
                 break;
             }
-            if self.contents[ix].is_some() {
-                ix += 1;
+            if self.records[front].length == 0 {
+                front += 1;
                 continue;
             }
-            let Some(removed) = self.contents.pop() else {
-                break;
-            };
-            if removed.is_some() {
-                self.contents[ix] = removed;
-                ix += 1;
+            if self.records[front].is_file() {
+                // record checksum as files found at front of memory
+                total_checksum += self.records[front].checksum();
+                front += 1;
+                continue;
             }
+            while back > front
+                && (self.records[back].is_free_space() || self.records[back].length == 0)
+            {
+                // skip over free space at back of memory, look for files
+                back -= 1;
+            }
+            if back <= front {
+                // all back-of-memory files have been exhausted; we can no longer moves files to
+                // the front of memory into free space, so just keep scanning forward recording the
+                // checksum
+                front += 1;
+                continue;
+            }
+
+            // we're located at free space at front of memory and a file at the back of memory (due
+            // to gate logic above)
+            let moved = self.records[front].length.min(self.records[back].length);
+            total_checksum += checksum(
+                self.records[back].id.unwrap_or(0),
+                self.records[front].start,
+                moved,
+            );
+
+            // checksum now adjusted so reduce both elements in size
+            self.records[front].start += moved;
+            self.records[front].length -= moved;
+            self.records[back].length -= moved;
         }
+
+        total_checksum
+    }
+
+    fn defragged_whole_files_checksum(&self) -> usize {
+        let mut total_checksum = 0;
+        let mut alloc = SpaceAllocator::new();
+
+        for pos in (0..self.records.len()).rev() {
+            let record = &self.records[pos];
+
+            if !record.is_file() {
+                continue;
+            }
+
+            let start = alloc
+                .next(self, record.length)
+                .unwrap_or(record.start)
+                .min(record.start);
+            total_checksum += checksum(record.id.unwrap_or(0), start, record.length);
+        }
+
+        total_checksum
     }
 }
 
 #[derive(Debug, PartialEq)]
-struct File {
-    id: usize,
-    start: usize,
-    length: usize,
-}
+struct ParseDiskMapError;
 
-impl File {
-    fn checksum(&self) -> usize {
-        (self.start..(self.start + self.length))
-            .map(|pos| pos * self.id)
-            .sum()
+const fn parse_digit(ch: char) -> Result<usize, ParseDiskMapError> {
+    match ch {
+        '0' => Ok(0),
+        '1' => Ok(1),
+        '2' => Ok(2),
+        '3' => Ok(3),
+        '4' => Ok(4),
+        '5' => Ok(5),
+        '6' => Ok(6),
+        '7' => Ok(7),
+        '8' => Ok(8),
+        '9' => Ok(9),
+        _ => Err(ParseDiskMapError),
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct Space {
-    start: usize,
-    length: usize,
-}
-
-impl Space {
-    const fn overlaps(&self, other: Self) -> bool {
-        !(other.start > self.start + self.length || other.start + other.length < self.start)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct FileSystem {
-    files: Vec<File>,
-    spaces: BTreeSet<Space>,
-}
-
-impl FileSystem {
-    fn find_space(&self, length: usize, before: usize) -> Option<Space> {
-        self.spaces
-            .iter()
-            .find(|s| s.length >= length && s.start < before)
-            .copied()
-    }
-
-    fn allocate(&mut self, length: usize, before: usize) -> Option<usize> {
-        let space = self.find_space(length, before)?;
-        self.spaces.remove(&space);
-        let remaining = space.length.saturating_sub(length);
-        if remaining > 0 {
-            self.spaces.insert(Space {
-                start: space.start + length,
-                length: remaining,
-            });
-        }
-        Some(space.start)
-    }
-
-    fn checksum(&self) -> usize {
-        self.files.iter().map(File::checksum).sum()
-    }
-
-    fn defrag(&mut self) {
-        for ix in (0..self.files.len()).rev() {
-            let length = self.files[ix].length;
-            if let Some(start) = self.allocate(length, self.files[ix].start) {
-                self.free(Space {
-                    start: self.files[ix].start,
-                    length: self.files[ix].length,
-                });
-                self.files[ix].start = start;
-            }
-        }
-    }
-
-    fn free(&mut self, space: Space) {
-        let mut start = space.start;
-        let mut end = space.start + space.length;
-
-        for other in self.spaces.clone() {
-            if other.start > end {
-                break;
-            }
-            if space.overlaps(other) {
-                start = start.min(other.start);
-                end = end.max(other.start + other.length);
-                self.spaces.remove(&other);
-            }
-        }
-
-        self.spaces.insert(Space {
-            start,
-            length: end - start,
-        });
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct ParseHardDriveError;
-
-fn parse_digit(ch: char) -> Result<usize, ParseHardDriveError> {
-    let digit = ch.to_digit(10).ok_or(ParseHardDriveError)?;
-    digit.try_into().map_err(|_| ParseHardDriveError)
-}
-
-impl FromStr for HardDrive {
-    type Err = ParseHardDriveError;
+impl FromStr for DiskMap {
+    type Err = ParseDiskMapError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let mut contents = Vec::new();
-        let mut file_id = 0;
+        let mut records = Vec::new();
 
-        for (pos, ch) in input.trim().chars().enumerate() {
-            let space = if pos % 2 == 0 {
-                let id = file_id;
-                file_id += 1;
-                Some(id)
+        let mut start = 0;
+        let mut id = 0..;
+        let mut file = true;
+
+        for ch in input.trim().chars() {
+            let length = parse_digit(ch)?;
+            let id = if file {
+                Some(id.next().unwrap_or(0))
             } else {
                 None
             };
-            let length = parse_digit(ch)?;
-            for _ in 0..length {
-                contents.push(space);
-            }
-        }
-
-        Ok(Self { contents })
-    }
-}
-
-impl FromStr for FileSystem {
-    type Err = ParseHardDriveError;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let mut files = Vec::new();
-        let mut spaces = BTreeSet::new();
-        let mut id = 0;
-        let mut start = 0;
-
-        for (ix, ch) in input.trim().chars().enumerate() {
-            let length = parse_digit(ch)?;
-            if length == 0 {
-                continue;
-            }
-
-            if ix % 2 == 0 {
-                files.push(File { id, start, length });
-                id += 1;
-            } else {
-                spaces.insert(Space { start, length });
-            }
+            records.push(Record { id, start, length });
 
             start += length;
+            file = !file;
         }
 
-        Ok(Self { files, spaces })
+        Ok(Self { records })
     }
 }
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    HardDrive::from_str(input).map_or(None, |mut drive| {
-        drive.defrag();
-        Some(drive.checksum())
-    })
+    DiskMap::from_str(input).map_or(None, |dm| Some(dm.defragged_checksum()))
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    FileSystem::from_str(input).map_or(None, |mut fs| {
-        fs.defrag();
-        Some(fs.checksum())
-    })
+    DiskMap::from_str(input).map_or(None, |dm| Some(dm.defragged_whole_files_checksum()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn example_hard_drive() -> HardDrive {
-        HardDrive {
-            contents: vec![
-                Some(0),
-                Some(0),
-                None,
-                None,
-                None,
-                Some(1),
-                Some(1),
-                Some(1),
-                None,
-                None,
-                None,
-                Some(2),
-                None,
-                None,
-                None,
-                Some(3),
-                Some(3),
-                Some(3),
-                None,
-                Some(4),
-                Some(4),
-                None,
-                Some(5),
-                Some(5),
-                Some(5),
-                Some(5),
-                None,
-                Some(6),
-                Some(6),
-                Some(6),
-                Some(6),
-                None,
-                Some(7),
-                Some(7),
-                Some(7),
-                None,
-                Some(8),
-                Some(8),
-                Some(8),
-                Some(8),
-                Some(9),
-                Some(9),
+    fn example_disk_map() -> DiskMap {
+        DiskMap {
+            records: vec![
+                Record {
+                    id: Some(0),
+                    start: 0,
+                    length: 2,
+                },
+                Record {
+                    id: None,
+                    start: 2,
+                    length: 3,
+                },
+                Record {
+                    id: Some(1),
+                    start: 5,
+                    length: 3,
+                },
+                Record {
+                    id: None,
+                    start: 8,
+                    length: 3,
+                },
+                Record {
+                    id: Some(2),
+                    start: 11,
+                    length: 1,
+                },
+                Record {
+                    id: None,
+                    start: 12,
+                    length: 3,
+                },
+                Record {
+                    id: Some(3),
+                    start: 15,
+                    length: 3,
+                },
+                Record {
+                    id: None,
+                    start: 18,
+                    length: 1,
+                },
+                Record {
+                    id: Some(4),
+                    start: 19,
+                    length: 2,
+                },
+                Record {
+                    id: None,
+                    start: 21,
+                    length: 1,
+                },
+                Record {
+                    id: Some(5),
+                    start: 22,
+                    length: 4,
+                },
+                Record {
+                    id: None,
+                    start: 26,
+                    length: 1,
+                },
+                Record {
+                    id: Some(6),
+                    start: 27,
+                    length: 4,
+                },
+                Record {
+                    id: None,
+                    start: 31,
+                    length: 1,
+                },
+                Record {
+                    id: Some(7),
+                    start: 32,
+                    length: 3,
+                },
+                Record {
+                    id: None,
+                    start: 35,
+                    length: 1,
+                },
+                Record {
+                    id: Some(8),
+                    start: 36,
+                    length: 4,
+                },
+                Record {
+                    id: None,
+                    start: 40,
+                    length: 0,
+                },
+                Record {
+                    id: Some(9),
+                    start: 40,
+                    length: 2,
+                },
             ],
         }
-    }
-
-    fn example_hard_drive_defragged() -> HardDrive {
-        HardDrive {
-            contents: vec![
-                Some(0),
-                Some(0),
-                Some(9),
-                Some(9),
-                Some(8),
-                Some(1),
-                Some(1),
-                Some(1),
-                Some(8),
-                Some(8),
-                Some(8),
-                Some(2),
-                Some(7),
-                Some(7),
-                Some(7),
-                Some(3),
-                Some(3),
-                Some(3),
-                Some(6),
-                Some(4),
-                Some(4),
-                Some(6),
-                Some(5),
-                Some(5),
-                Some(5),
-                Some(5),
-                Some(6),
-                Some(6),
-            ],
-        }
-    }
-
-    #[test]
-    fn test_parse_hard_drive() {
-        assert_eq!(
-            HardDrive::from_str(&advent_of_code::template::read_file("examples", DAY)),
-            Ok(example_hard_drive()),
-        );
-    }
-
-    #[test]
-    fn test_defrag() {
-        let mut hard_drive = example_hard_drive();
-        hard_drive.defrag();
-        assert_eq!(hard_drive, example_hard_drive_defragged());
     }
 
     #[test]
     fn test_checksum() {
-        assert_eq!(example_hard_drive_defragged().checksum(), 1928);
+        assert_eq!(checksum(4, 5, 3), 72);
+        assert_eq!(
+            Record {
+                id: Some(4),
+                start: 5,
+                length: 3
+            }
+            .checksum(),
+            72
+        );
+        assert_eq!(checksum(2, 7, 5), 90);
+        assert_eq!(
+            Record {
+                id: Some(2),
+                start: 7,
+                length: 5
+            }
+            .checksum(),
+            90
+        );
+
+        assert_eq!(checksum(0, 4, 13), 0);
+        assert_eq!(
+            Record {
+                id: None,
+                start: 5,
+                length: 2
+            }
+            .checksum(),
+            0
+        );
+        assert_eq!(
+            Record {
+                id: None,
+                start: 4,
+                length: 4
+            }
+            .checksum(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_parse_input() {
+        assert_eq!(
+            DiskMap::from_str(&advent_of_code::template::read_file("examples", DAY)),
+            Ok(example_disk_map()),
+        );
     }
 
     #[test]
@@ -324,194 +403,35 @@ mod tests {
         assert_eq!(result, Some(1928));
     }
 
-    fn example_file_system() -> FileSystem {
-        let mut spaces = BTreeSet::new();
-        spaces.insert(Space {
-            start: 2,
-            length: 3,
-        });
-        spaces.insert(Space {
-            start: 8,
-            length: 3,
-        });
-        spaces.insert(Space {
-            start: 12,
-            length: 3,
-        });
-        spaces.insert(Space {
-            start: 18,
-            length: 1,
-        });
-        spaces.insert(Space {
-            start: 21,
-            length: 1,
-        });
-        spaces.insert(Space {
-            start: 26,
-            length: 1,
-        });
-        spaces.insert(Space {
-            start: 31,
-            length: 1,
-        });
-        spaces.insert(Space {
-            start: 35,
-            length: 1,
-        });
-        FileSystem {
-            files: vec![
-                File {
-                    id: 0,
-                    start: 0,
-                    length: 2,
-                },
-                File {
-                    id: 1,
-                    start: 5,
-                    length: 3,
-                },
-                File {
-                    id: 2,
-                    start: 11,
-                    length: 1,
-                },
-                File {
-                    id: 3,
-                    start: 15,
-                    length: 3,
-                },
-                File {
-                    id: 4,
-                    start: 19,
-                    length: 2,
-                },
-                File {
-                    id: 5,
-                    start: 22,
-                    length: 4,
-                },
-                File {
-                    id: 6,
-                    start: 27,
-                    length: 4,
-                },
-                File {
-                    id: 7,
-                    start: 32,
-                    length: 3,
-                },
-                File {
-                    id: 8,
-                    start: 36,
-                    length: 4,
-                },
-                File {
-                    id: 9,
-                    start: 40,
-                    length: 2,
-                },
-            ],
-            spaces,
-        }
-    }
-
-    fn example_file_system_defragged() -> FileSystem {
-        let mut spaces = BTreeSet::new();
-        spaces.insert(Space {
-            start: 11,
-            length: 1,
-        });
-        spaces.insert(Space {
-            start: 14,
-            length: 1,
-        });
-        spaces.insert(Space {
-            start: 18,
-            length: 4,
-        });
-        spaces.insert(Space {
-            start: 26,
-            length: 1,
-        });
-        spaces.insert(Space {
-            start: 31,
-            length: 5,
-        });
-        spaces.insert(Space {
-            start: 40,
-            length: 2,
-        });
-
-        FileSystem {
-            files: vec![
-                File {
-                    id: 0,
-                    start: 0,
-                    length: 2,
-                },
-                File {
-                    id: 1,
-                    start: 5,
-                    length: 3,
-                },
-                File {
-                    id: 2,
-                    start: 4,
-                    length: 1,
-                },
-                File {
-                    id: 3,
-                    start: 15,
-                    length: 3,
-                },
-                File {
-                    id: 4,
-                    start: 12,
-                    length: 2,
-                },
-                File {
-                    id: 5,
-                    start: 22,
-                    length: 4,
-                },
-                File {
-                    id: 6,
-                    start: 27,
-                    length: 4,
-                },
-                File {
-                    id: 7,
-                    start: 8,
-                    length: 3,
-                },
-                File {
-                    id: 8,
-                    start: 36,
-                    length: 4,
-                },
-                File {
-                    id: 9,
-                    start: 2,
-                    length: 2,
-                },
-            ],
-            spaces,
-        }
-    }
-
     #[test]
-    fn test_example_file_system_defrag() {
-        let mut file_system = example_file_system();
-        file_system.defrag();
-        assert_eq!(file_system, example_file_system_defragged());
-    }
+    fn test_space_allocator() {
+        let disk_map = example_disk_map();
 
-    #[test]
-    fn test_parse_file_system() {
-        assert_eq!(
-            FileSystem::from_str(&advent_of_code::template::read_file("examples", DAY)),
-            Ok(example_file_system()),
-        );
+        let mut allocator = SpaceAllocator::new();
+        assert_eq!(allocator.next(&disk_map, 1), Some(2));
+        assert_eq!(allocator.next(&disk_map, 1), Some(3));
+        assert_eq!(allocator.next(&disk_map, 1), Some(4));
+        assert_eq!(allocator.next(&disk_map, 1), Some(8));
+
+        let mut allocator = SpaceAllocator::new();
+        assert_eq!(allocator.next(&disk_map, 2), Some(2));
+        assert_eq!(allocator.next(&disk_map, 2), Some(8));
+        assert_eq!(allocator.next(&disk_map, 2), Some(12));
+        assert_eq!(allocator.next(&disk_map, 2), None);
+        assert_eq!(allocator.next(&disk_map, 1), Some(4));
+        assert_eq!(allocator.next(&disk_map, 1), Some(10));
+        assert_eq!(allocator.next(&disk_map, 1), Some(14));
+        assert_eq!(allocator.next(&disk_map, 1), Some(18));
+
+        let mut allocator = SpaceAllocator::new();
+        assert_eq!(allocator.next(&disk_map, 3), Some(2));
+        assert_eq!(allocator.next(&disk_map, 3), Some(8));
+        assert_eq!(allocator.next(&disk_map, 3), Some(12));
+        assert_eq!(allocator.next(&disk_map, 3), None);
+        assert_eq!(allocator.next(&disk_map, 1), Some(18));
+
+        let mut allocator = SpaceAllocator::new();
+        assert_eq!(allocator.next(&disk_map, 4), None);
     }
 
     #[test]
