@@ -133,11 +133,10 @@ impl DiskMap {
                 back -= 1;
             }
             if back <= front {
-                // all back-of-memory files have been exhausted; we can no longer moves files to
-                // the front of memory into free space, so just keep scanning forward recording the
-                // checksum
-                front += 1;
-                continue;
+                // we can no longer moves files to the front of memory into free space, and
+                // everything we passed moving forwards from the back is already exhausted, so we
+                // are done
+                break;
             }
 
             // we're located at free space at front of memory and a file at the back of memory (due
