@@ -64,72 +64,70 @@ impl TrailMapSearchState {
     }
 }
 
+type TrailMapGrid = [[Option<u8>; GRID_SIZE]; GRID_SIZE];
+
 #[derive(Debug, PartialEq)]
 struct TrailMap {
-    grid: [[Option<u8>; GRID_SIZE]; GRID_SIZE],
+    grid: TrailMapGrid,
+    queue: VecDeque<TrailMapSearchState>,
 }
 
 impl TrailMap {
-    fn initial_search_queue(&self) -> VecDeque<TrailMapSearchState> {
+    fn new(grid: &TrailMapGrid) -> Self {
         let mut queue = VecDeque::new();
-        (0..GRID_SIZE).for_each(|row| {
-            (0..GRID_SIZE).for_each(|col| {
-                if self.grid[row][col] == Some(0) {
-                    queue.push_back(TrailMapSearchState {
+        queue.extend(grid.iter().enumerate().flat_map(|(row, heights)| {
+            heights.iter().enumerate().filter_map(move |(col, height)| {
+                if height.is_some_and(|h| h == 0) {
+                    Some(TrailMapSearchState {
                         origin: (row, col),
                         row,
                         col,
-                    });
+                    })
+                } else {
+                    None
                 }
-            });
-        });
-        queue
+            })
+        }));
+        Self { grid: *grid, queue }
     }
 
-    fn total_trail_head_rating(&self) -> usize {
-        let mut queue = self.initial_search_queue();
+    fn total_trail_head_rating(self) -> usize {
         let mut rating = 0;
-
-        while let Some(state) = queue.pop_front() {
-            let height = self.grid[state.row][state.col];
-
-            if height == Some(9) {
-                rating += 1;
-                continue;
-            }
-
-            let climb = height.map(|h| h + 1);
-            for candidate in state.neighbours() {
-                if self.grid[candidate.row][candidate.col] == climb {
-                    queue.push_back(candidate);
-                }
-            }
+        for _head in self {
+            rating += 1;
         }
-
         rating
     }
 
-    fn total_trail_head_score(&self) -> usize {
-        let mut queue = self.initial_search_queue();
+    fn total_trail_head_score(self) -> usize {
         let mut score = BTreeSet::new();
+        for state in self {
+            score.insert(state);
+        }
+        score.len()
+    }
+}
 
-        while let Some(state) = queue.pop_front() {
+impl Iterator for TrailMap {
+    type Item = TrailMapSearchState;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(state) = self.queue.pop_front() {
             let height = self.grid[state.row][state.col];
 
             if height == Some(9) {
-                score.insert(state);
-                continue;
+                return Some(state);
             }
 
             let climb = height.map(|h| h + 1);
             for candidate in state.neighbours() {
                 if self.grid[candidate.row][candidate.col] == climb {
-                    queue.push_back(candidate);
+                    self.queue.push_back(candidate);
                 }
             }
         }
 
-        score.len()
+        None
     }
 }
 
@@ -157,15 +155,13 @@ impl FromStr for TrailMap {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let mut grid = [[None; GRID_SIZE]; GRID_SIZE];
-
         for (row, line) in input.lines().enumerate() {
             for (col, ch) in line.chars().enumerate() {
                 let digit = parse_digit(ch)?;
                 grid[row][col] = Some(digit);
             }
         }
-
-        Ok(Self { grid })
+        Ok(Self::new(&grid))
     }
 }
 
@@ -251,7 +247,7 @@ mod tests {
         grid[7][6] = Some(3);
         grid[7][7] = Some(2);
 
-        TrailMap { grid }
+        TrailMap::new(&grid)
     }
 
     #[test]
