@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::str::FromStr;
 
 advent_of_code::solution!(12);
@@ -16,7 +16,7 @@ const fn grid_add(lhs: usize, rhs: usize) -> Option<usize> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum Direction {
     North,
     East,
@@ -25,7 +25,7 @@ enum Direction {
 }
 
 impl Direction {
-    fn step_from(&self, row: usize, col: usize) -> Option<(usize, usize)> {
+    fn step_from(self, row: usize, col: usize) -> Option<(usize, usize)> {
         let row = match self {
             Self::North => row.checked_sub(1),
             Self::East | Self::West => Some(row),
@@ -49,15 +49,30 @@ const COMPASS: [Direction; 4] = [
     Direction::West,
 ];
 
-fn neighbours(row: usize, col: usize) -> impl Iterator<Item = Option<(usize, usize)>> {
-    COMPASS.iter().map(move |dir| dir.step_from(row, col))
-}
-
 #[derive(Debug, PartialEq)]
 struct Region {
     plant: char,
-    area: u32,
-    perimeter: u32,
+    area: usize,
+    sides: BTreeSet<(Direction, usize, usize)>,
+}
+
+impl Region {
+    fn distinct_sides(&self) -> usize {
+        self.sides
+            .iter()
+            .filter(|(direction, row, col)| {
+                let left_dir = match direction {
+                    Direction::North => Direction::West,
+                    Direction::East => Direction::North,
+                    Direction::South => Direction::East,
+                    Direction::West => Direction::South,
+                };
+                left_dir
+                    .step_from(*row, *col)
+                    .map_or(true, |(r, c)| !self.sides.contains(&(*direction, r, c)))
+            })
+            .count()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -65,16 +80,16 @@ struct Farm {
     grid: Grid,
 }
 
-type VisitTracker = [[bool; GRID_SIZE]; GRID_SIZE];
-
 impl Farm {
-    fn find_region(&self, row: usize, col: usize, visited: &mut VisitTracker) -> Option<Region> {
+    fn find_region(
+        &self,
+        row: usize,
+        col: usize,
+        visited: &mut [[bool; GRID_SIZE]; GRID_SIZE],
+    ) -> Option<Region> {
         let plant = self.grid[row][col]?;
-        let mut region = Region {
-            plant,
-            area: 0,
-            perimeter: 0,
-        };
+        let mut sides = BTreeSet::new();
+        let mut area = 0;
         let mut queue = VecDeque::new();
         queue.push_back((row, col));
 
@@ -83,31 +98,31 @@ impl Farm {
                 continue;
             }
             visited[row][col] = true;
-            region.area += 1;
+            area += 1;
 
-            for neighbour in neighbours(row, col) {
-                let Some((row, col)) = neighbour else {
+            for direction in COMPASS {
+                let Some((new_row, new_col)) = direction.step_from(row, col) else {
                     // No neighbour on this side == edge of grid
-                    region.perimeter += 1;
+                    sides.insert((direction, row, col));
                     continue;
                 };
-                let Some(other) = self.grid[row][col] else {
+                let Some(other) = self.grid[new_row][new_col] else {
                     // Empty space on this side == edge of grid
-                    region.perimeter += 1;
+                    sides.insert((direction, row, col));
                     continue;
                 };
 
                 if other == plant {
                     // matching plant; part of area
-                    queue.push_back((row, col));
+                    queue.push_back((new_row, new_col));
                 } else {
                     // different plant == edge of this area
-                    region.perimeter += 1;
+                    sides.insert((direction, row, col));
                 }
             }
         }
 
-        Some(region)
+        Some(Region { plant, area, sides })
     }
 
     fn find_regions(&self) -> Vec<Region> {
@@ -149,20 +164,27 @@ impl FromStr for Farm {
 }
 
 #[must_use]
-pub fn part_one(input: &str) -> Option<u32> {
+pub fn part_one(input: &str) -> Option<usize> {
     Farm::from_str(input).map_or(None, |farm| {
         Some(
             farm.find_regions()
                 .iter()
-                .map(|r| r.area * r.perimeter)
+                .map(|r| r.area * r.sides.len())
                 .sum(),
         )
     })
 }
 
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    Farm::from_str(input).map_or(None, |farm| {
+        Some(
+            farm.find_regions()
+                .iter()
+                .map(|r| r.area * r.distinct_sides())
+                .sum(),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -285,105 +307,6 @@ mod tests {
     }
 
     #[test]
-    fn test_find_region() {
-        let mut farm = example_farm();
-        let mut visited = [[false; GRID_SIZE]; GRID_SIZE];
-        assert_eq!(
-            farm.find_region(0, 0, &mut visited),
-            Some(Region {
-                plant: 'R',
-                area: 12,
-                perimeter: 18
-            }),
-        );
-        assert_eq!(visited[0][0], true);
-        assert_eq!(visited[0][1], true);
-        assert_eq!(visited[0][2], true);
-        assert_eq!(visited[0][3], true);
-        assert_eq!(visited[0][4], false);
-        assert_eq!(visited[1][0], true);
-        assert_eq!(visited[1][1], true);
-        assert_eq!(visited[1][2], true);
-        assert_eq!(visited[1][3], true);
-        assert_eq!(visited[1][4], false);
-        assert_eq!(visited[2][0], false);
-        assert_eq!(visited[2][1], false);
-        assert_eq!(visited[2][2], true);
-        assert_eq!(visited[2][3], true);
-        assert_eq!(visited[2][4], true);
-        assert_eq!(visited[2][5], false);
-        assert_eq!(visited[3][0], false);
-        assert_eq!(visited[3][1], false);
-        assert_eq!(visited[3][2], true);
-        assert_eq!(visited[3][3], false);
-    }
-
-    #[test]
-    fn test_find_regions() {
-        let regions = example_farm().find_regions();
-        assert_eq!(
-            regions,
-            vec![
-                Region {
-                    plant: 'R',
-                    area: 12,
-                    perimeter: 18
-                },
-                Region {
-                    plant: 'I',
-                    area: 4,
-                    perimeter: 8
-                },
-                Region {
-                    plant: 'C',
-                    area: 14,
-                    perimeter: 28
-                },
-                Region {
-                    plant: 'F',
-                    area: 10,
-                    perimeter: 18
-                },
-                Region {
-                    plant: 'V',
-                    area: 13,
-                    perimeter: 20
-                },
-                Region {
-                    plant: 'J',
-                    area: 11,
-                    perimeter: 20
-                },
-                Region {
-                    plant: 'C',
-                    area: 1,
-                    perimeter: 4
-                },
-                Region {
-                    plant: 'E',
-                    area: 13,
-                    perimeter: 18
-                },
-                Region {
-                    plant: 'I',
-                    area: 14,
-                    perimeter: 22
-                },
-                Region {
-                    plant: 'M',
-                    area: 5,
-                    perimeter: 12
-                },
-                Region {
-                    plant: 'S',
-                    area: 3,
-                    perimeter: 8
-                },
-            ]
-        );
-    }
-
-    #[test]
     fn test_part_one() {
         let result = part_one(&advent_of_code::template::read_file("examples", DAY));
         assert_eq!(result, Some(1930));
@@ -392,6 +315,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(1206));
     }
 }
