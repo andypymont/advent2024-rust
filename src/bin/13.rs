@@ -2,38 +2,41 @@ use std::str::FromStr;
 
 advent_of_code::solution!(13);
 
-#[derive(Debug, PartialEq)]
-struct Point {
-    x: u32,
-    y: u32,
-}
+type Point = (i64, i64);
 
 #[derive(Debug, PartialEq)]
 struct Machine {
-    button_a: Point,
-    button_b: Point,
+    a: Point,
+    b: Point,
     prize: Point,
 }
 
+const DISTANT_CLAW: i64 = 10_000_000_000_000;
+
 impl Machine {
-    fn find_a_presses(&self, b: u32) -> Option<u32> {
-        let rem = self.prize.x.checked_sub(b * self.button_b.x)?;
-        if rem % self.button_a.x == 0 {
-            let a = rem / self.button_a.x;
-            if (a * self.button_a.y) + (b * self.button_b.y) == self.prize.y {
-                Some(a)
-            } else {
-                None
-            }
-        } else {
-            None
+    const fn distant(&self) -> Self {
+        Self {
+            prize: (self.prize.0 + DISTANT_CLAW, self.prize.1 + DISTANT_CLAW),
+            ..*self
         }
     }
 
-    fn win_prize(&self) -> Option<u32> {
-        (1..=100)
-            .filter_map(|b| self.find_a_presses(b).map(|a| (a * 3) + b))
-            .min()
+    const fn win_prize(&self) -> Option<i64> {
+        let denom = (self.a.1 * self.b.0) - (self.a.0 * self.b.1);
+        if denom == 0 {
+            return None;
+        }
+
+        let a = ((self.b.0 * self.prize.1) - (self.b.1 * self.prize.0)) / denom;
+        let b = ((self.a.1 * self.prize.0) - (self.a.0 * self.prize.1)) / denom;
+
+        if (a * self.a.0) + (b * self.b.0) == self.prize.0
+            && (a * self.a.1) + (b * self.b.1) == self.prize.1
+        {
+            Some((a * 3) + b)
+        } else {
+            None
+        }
     }
 }
 
@@ -43,7 +46,13 @@ struct Arcade {
 }
 
 impl Arcade {
-    fn win_all_prizes(&self) -> u32 {
+    fn distant(&self) -> Self {
+        Self {
+            machines: self.machines.iter().map(Machine::distant).collect(),
+        }
+    }
+
+    fn win_all_prizes(&self) -> i64 {
         self.machines
             .iter()
             .map(|machine| machine.win_prize().unwrap_or(0))
@@ -54,22 +63,12 @@ impl Arcade {
 #[derive(Debug, PartialEq)]
 struct ParseArcadeError;
 
-impl FromStr for Point {
-    type Err = ParseArcadeError;
-
-    fn from_str(line: &str) -> Result<Self, Self::Err> {
-        let (_prefix, coords) = line.split_once(": ").ok_or(ParseArcadeError)?;
-        let (x, y) = {
-            let (x, y) = coords.split_once(", ").ok_or(ParseArcadeError)?;
-
-            let x = x[2..].parse().map_err(|_| ParseArcadeError)?;
-            let y = y[2..].parse().map_err(|_| ParseArcadeError)?;
-
-            (x, y)
-        };
-
-        Ok(Self { x, y })
-    }
+fn parse_point(text: &str) -> Result<Point, ParseArcadeError> {
+    let (_prefix, coords) = text.split_once(": ").ok_or(ParseArcadeError)?;
+    let (x, y) = coords.split_once(", ").ok_or(ParseArcadeError)?;
+    let x = x[2..].parse().map_err(|_| ParseArcadeError)?;
+    let y = y[2..].parse().map_err(|_| ParseArcadeError)?;
+    Ok((x, y))
 }
 
 impl FromStr for Machine {
@@ -77,14 +76,10 @@ impl FromStr for Machine {
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let mut lines = text.lines();
-        let button_a = lines.next().map_or(Err(ParseArcadeError), str::parse)?;
-        let button_b = lines.next().map_or(Err(ParseArcadeError), str::parse)?;
-        let prize = lines.next().map_or(Err(ParseArcadeError), str::parse)?;
-        Ok(Self {
-            button_a,
-            button_b,
-            prize,
-        })
+        let a = lines.next().map_or(Err(ParseArcadeError), parse_point)?;
+        let b = lines.next().map_or(Err(ParseArcadeError), parse_point)?;
+        let prize = lines.next().map_or(Err(ParseArcadeError), parse_point)?;
+        Ok(Self { a, b, prize })
     }
 }
 
@@ -104,14 +99,13 @@ impl FromStr for Arcade {
 }
 
 #[must_use]
-pub fn part_one(input: &str) -> Option<u32> {
+pub fn part_one(input: &str) -> Option<i64> {
     Arcade::from_str(input).map_or(None, |arcade| Some(arcade.win_all_prizes()))
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<i64> {
+    Arcade::from_str(input).map_or(None, |arcade| Some(arcade.distant().win_all_prizes()))
 }
 
 #[cfg(test)]
@@ -122,24 +116,24 @@ mod tests {
         Arcade {
             machines: vec![
                 Machine {
-                    button_a: Point { x: 94, y: 34 },
-                    button_b: Point { x: 22, y: 67 },
-                    prize: Point { x: 8400, y: 5400 },
+                    a: (94, 34),
+                    b: (22, 67),
+                    prize: (8400, 5400),
                 },
                 Machine {
-                    button_a: Point { x: 26, y: 66 },
-                    button_b: Point { x: 67, y: 21 },
-                    prize: Point { x: 12748, y: 12176 },
+                    a: (26, 66),
+                    b: (67, 21),
+                    prize: (12748, 12176),
                 },
                 Machine {
-                    button_a: Point { x: 17, y: 86 },
-                    button_b: Point { x: 84, y: 37 },
-                    prize: Point { x: 7870, y: 6450 },
+                    a: (17, 86),
+                    b: (84, 37),
+                    prize: (7870, 6450),
                 },
                 Machine {
-                    button_a: Point { x: 69, y: 23 },
-                    button_b: Point { x: 27, y: 71 },
-                    prize: Point { x: 18641, y: 10279 },
+                    a: (69, 23),
+                    b: (27, 71),
+                    prize: (18641, 10279),
                 },
             ],
         }
@@ -170,8 +164,18 @@ mod tests {
     }
 
     #[test]
+    fn test_win_distant_prize() {
+        let arcade = example_arcade().distant();
+
+        assert_eq!(arcade.machines[0].win_prize(), None);
+        assert_eq!(arcade.machines[1].win_prize(), Some(459_236_326_669));
+        assert_eq!(arcade.machines[2].win_prize(), None);
+        assert_eq!(arcade.machines[3].win_prize(), Some(416_082_282_239));
+    }
+
+    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(875_318_608_908));
     }
 }
