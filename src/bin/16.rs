@@ -200,10 +200,11 @@ impl Maze {
         }
 
         while let Some(state) = queue.pop() {
+            if state.score > best {
+                break;
+            }
+
             if state.position == self.end {
-                if state.score > best {
-                    break;
-                }
                 best = state.score;
                 for pos in state.path {
                     seats[pos] = true;
