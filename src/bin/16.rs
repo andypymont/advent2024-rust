@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::BinaryHeap;
 use std::str::FromStr;
 
 advent_of_code::solution!(16);
@@ -23,6 +23,13 @@ enum Direction {
     West,
 }
 
+const COMPASS: [Direction; 4] = [
+    Direction::North,
+    Direction::East,
+    Direction::South,
+    Direction::West,
+];
+
 impl Direction {
     fn step_from(self, position: usize) -> Option<usize> {
         let row = position / GRID_SIZE;
@@ -41,6 +48,15 @@ impl Direction {
             Self::North | Self::South => Some(col),
         };
         col.map(|col| (row * GRID_SIZE) + col)
+    }
+
+    const fn opposite(self) -> Self {
+        match self {
+            Self::North => Self::South,
+            Self::East => Self::West,
+            Self::South => Self::North,
+            Self::West => Self::East,
+        }
     }
 
     const fn turn_left(self) -> Self {
@@ -67,7 +83,6 @@ struct ReindeerState {
     score: u32,
     position: usize,
     facing: Direction,
-    path: Vec<usize>,
 }
 
 impl ReindeerState {
@@ -83,7 +98,6 @@ impl ReindeerState {
             score,
             position: maze.start,
             facing,
-            path: vec![maze.start],
         })
     }
 
@@ -103,17 +117,33 @@ impl ReindeerState {
                 (self.facing.turn_right(), 1001),
             ]
             .into_iter()
-            .map(move |(facing, extra_score)| {
-                let mut path = self.path.clone();
-                path.push(position);
-                Self {
-                    score: self.score + extra_score,
-                    position,
-                    facing,
-                    path,
-                }
+            .map(move |(facing, extra_score)| Self {
+                score: self.score + extra_score,
+                position,
+                facing,
             }),
         )
+    }
+
+    fn previous_states(&self) -> impl Iterator<Item = Self> + use<'_> {
+        let left = self.facing.turn_left();
+        let right = self.facing.turn_right();
+        let opposite = self.facing.opposite();
+
+        [
+            (left, right, 1001),
+            (opposite, self.facing, 1),
+            (right, left, 1001),
+        ]
+        .into_iter()
+        .filter_map(move |(step, facing, less_score)| {
+            let position = step.step_from(self.position);
+            position.map(|position| Self {
+                score: self.score.saturating_sub(less_score),
+                position,
+                facing,
+            })
+        })
     }
 }
 
@@ -136,30 +166,74 @@ impl PartialOrd for ReindeerState {
 
 struct ReindeerStateQueue {
     queue: BinaryHeap<ReindeerState>,
-    best: BTreeMap<(usize, Direction), u32>,
+    best: Vec<u32>,
 }
 
 impl ReindeerStateQueue {
-    const fn new() -> Self {
+    fn new() -> Self {
         Self {
             queue: BinaryHeap::new(),
-            best: BTreeMap::new(),
-        }
-    }
-
-    fn push(&mut self, state: ReindeerState) {
-        let current = self
-            .best
-            .entry((state.position, state.facing))
-            .and_modify(|s| *s -= s.saturating_sub(state.score))
-            .or_insert(state.score);
-        if state.score <= *current {
-            self.queue.push(state);
+            best: vec![u32::MAX; 4 * GRID_SIZE * GRID_SIZE],
         }
     }
 
     fn pop(&mut self) -> Option<ReindeerState> {
         self.queue.pop()
+    }
+
+    fn push(&mut self, state: ReindeerState) {
+        let dir = match state.facing {
+            Direction::North => 0,
+            Direction::East => 1,
+            Direction::South => 2,
+            Direction::West => 3,
+        };
+        let current = self.best[(state.position * 4) + dir];
+        if state.score <= current {
+            self.best[(state.position * 4) + dir] = state.score;
+            self.queue.push(state);
+        }
+    }
+
+    fn contains_exact(&self, state: &ReindeerState) -> bool {
+        let dir = match state.facing {
+            Direction::North => 0,
+            Direction::East => 1,
+            Direction::South => 2,
+            Direction::West => 3,
+        };
+        self.best[(state.position * 4) + dir] == state.score
+    }
+
+    fn count_reverse_paths(&self, maze: &Maze, score: u32) -> u32 {
+        let mut queue = BinaryHeap::new();
+
+        let position = maze.end;
+        for facing in COMPASS {
+            let state = ReindeerState {
+                score,
+                position,
+                facing,
+            };
+            if self.contains_exact(&state) {
+                queue.push(state);
+            }
+        }
+
+        let mut visited = [false; GRID_SIZE * GRID_SIZE];
+        while let Some(state) = queue.pop() {
+            visited[state.position] = true;
+            if state.position == maze.start {
+                continue;
+            }
+            for state in state.previous_states() {
+                if self.contains_exact(&state) {
+                    queue.push(state);
+                }
+            }
+        }
+
+        visited.into_iter().map(u32::from).sum()
     }
 }
 
@@ -190,10 +264,8 @@ impl Maze {
         None
     }
 
-    fn spaces_part_of_best_paths(&self) -> u32 {
+    fn spaces_in_best_paths(&self) -> u32 {
         let mut best = u32::MAX;
-        let mut seats = [false; GRID_SIZE * GRID_SIZE];
-
         let mut queue = ReindeerStateQueue::new();
         for state in ReindeerState::initial(self) {
             queue.push(state);
@@ -206,9 +278,6 @@ impl Maze {
 
             if state.position == self.end {
                 best = state.score;
-                for pos in state.path {
-                    seats[pos] = true;
-                }
                 continue;
             }
 
@@ -217,7 +286,7 @@ impl Maze {
             }
         }
 
-        seats.iter().map(|s| u32::from(*s)).sum()
+        queue.count_reverse_paths(self, best)
     }
 }
 
@@ -265,7 +334,7 @@ pub fn part_one(input: &str) -> Option<u32> {
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
-    Maze::from_str(input).map_or(None, |maze| Some(maze.spaces_part_of_best_paths()))
+    Maze::from_str(input).map_or(None, |maze| Some(maze.spaces_in_best_paths()))
 }
 
 #[cfg(test)]
