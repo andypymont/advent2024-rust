@@ -67,6 +67,7 @@ struct ReindeerState {
     score: u32,
     position: usize,
     facing: Direction,
+    visited: [bool; GRID_SIZE * GRID_SIZE],
 }
 
 impl ReindeerState {
@@ -78,10 +79,15 @@ impl ReindeerState {
             (Direction::West, 2000),
         ]
         .into_iter()
-        .map(|(facing, score)| Self {
-            score,
-            position: maze.start,
-            facing,
+        .map(|(facing, score)| {
+            let mut visited = [false; GRID_SIZE * GRID_SIZE];
+            visited[maze.start] = true;
+            Self {
+                score,
+                position: maze.start,
+                facing,
+                visited,
+            }
         })
     }
 
@@ -100,10 +106,15 @@ impl ReindeerState {
                 (self.facing.turn_right(), 1001),
             ]
             .into_iter()
-            .map(move |(facing, extra_score)| Self {
-                score: self.score + extra_score,
-                position,
-                facing,
+            .map(move |(facing, extra_score)| {
+                let mut visited = self.visited;
+                visited[position] = true;
+                Self {
+                    score: self.score + extra_score,
+                    position,
+                    facing,
+                    visited,
+                }
             }),
         )
     }
@@ -181,6 +192,35 @@ impl Maze {
 
         None
     }
+
+    fn spaces_part_of_best_paths(&self) -> u32 {
+        let mut best = u32::MAX;
+        let mut seats = [false; GRID_SIZE * GRID_SIZE];
+
+        let mut queue = ReindeerStateQueue::new();
+        for state in ReindeerState::initial(self) {
+            queue.push(state);
+        }
+
+        while let Some(state) = queue.pop() {
+            if state.position == self.end {
+                if state.score > best {
+                    break;
+                }
+                best = state.score;
+                for (pos, is_seat) in state.visited.iter().enumerate() {
+                    seats[pos] = seats[pos] || *is_seat;
+                }
+                continue;
+            }
+
+            for next in state.next_states(self) {
+                queue.push(next);
+            }
+        }
+
+        seats.iter().map(|s| u32::from(*s)).sum()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -225,10 +265,9 @@ pub fn part_one(input: &str) -> Option<u32> {
     Maze::from_str(input).map_or(None, |maze| maze.best_path())
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u32> {
+    Maze::from_str(input).map_or(None, |maze| Some(maze.spaces_part_of_best_paths()))
 }
 
 #[cfg(test)]
@@ -369,6 +408,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(45));
     }
 }
