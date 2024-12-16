@@ -239,7 +239,7 @@ impl ReindeerStateQueue {
 
 #[derive(Debug, PartialEq)]
 struct Maze {
-    grid: [bool; GRID_SIZE * GRID_SIZE],
+    grid: Vec<bool>,
     start: usize,
     end: usize,
 }
@@ -297,7 +297,7 @@ impl FromStr for Maze {
     type Err = ParseMazeError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let mut grid = [false; GRID_SIZE * GRID_SIZE];
+        let mut grid = vec![false; GRID_SIZE * GRID_SIZE];
         let mut start = Err(ParseMazeError);
         let mut end = Err(ParseMazeError);
 
@@ -346,7 +346,7 @@ mod tests {
     }
 
     fn example_maze() -> Maze {
-        let mut grid = [false; GRID_SIZE * GRID_SIZE];
+        let mut grid = vec![false; GRID_SIZE * GRID_SIZE];
         grid[position(1, 1)] = true;
         grid[position(1, 2)] = true;
         grid[position(1, 3)] = true;
