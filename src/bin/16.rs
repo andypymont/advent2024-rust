@@ -67,7 +67,7 @@ struct ReindeerState {
     score: u32,
     position: usize,
     facing: Direction,
-    visited: [bool; GRID_SIZE * GRID_SIZE],
+    path: Vec<usize>,
 }
 
 impl ReindeerState {
@@ -79,15 +79,11 @@ impl ReindeerState {
             (Direction::West, 2000),
         ]
         .into_iter()
-        .map(|(facing, score)| {
-            let mut visited = [false; GRID_SIZE * GRID_SIZE];
-            visited[maze.start] = true;
-            Self {
-                score,
-                position: maze.start,
-                facing,
-                visited,
-            }
+        .map(|(facing, score)| Self {
+            score,
+            position: maze.start,
+            facing,
+            path: vec![maze.start],
         })
     }
 
@@ -99,6 +95,7 @@ impl ReindeerState {
         if !maze.grid[position] {
             return empty;
         };
+
         Box::new(
             [
                 (self.facing, 1),
@@ -107,13 +104,13 @@ impl ReindeerState {
             ]
             .into_iter()
             .map(move |(facing, extra_score)| {
-                let mut visited = self.visited;
-                visited[position] = true;
+                let mut path = self.path.clone();
+                path.push(position);
                 Self {
                     score: self.score + extra_score,
                     position,
                     facing,
-                    visited,
+                    path,
                 }
             }),
         )
@@ -208,8 +205,8 @@ impl Maze {
                     break;
                 }
                 best = state.score;
-                for (pos, is_seat) in state.visited.iter().enumerate() {
-                    seats[pos] = seats[pos] || *is_seat;
+                for pos in state.path {
+                    seats[pos] = true;
                 }
                 continue;
             }
