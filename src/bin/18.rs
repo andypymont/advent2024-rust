@@ -21,6 +21,7 @@ const COMPASS: [Direction; 4] = [
 struct Grid {
     height: usize,
     width: usize,
+    corrupted: usize,
     cells: Vec<usize>,
 }
 
@@ -119,6 +120,17 @@ impl Grid {
 
         None
     }
+
+    fn first_coordinate_blocking_exit(&self) -> Option<(usize, usize)> {
+        let time = (1..=self.corrupted)
+            .find(|nanoseconds| self.shortest_path_after(*nanoseconds).is_none());
+        time.map(|t| {
+            let pos = self.cells.iter().position(|cell| *cell == t).unwrap_or(0);
+            let row = pos / self.width;
+            let col = pos % self.width;
+            (col, row)
+        })
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -127,19 +139,22 @@ struct ParseGridError;
 impl Grid {
     fn from_input(input: &str, height: usize, width: usize) -> Result<Self, ParseGridError> {
         let mut cells = vec![usize::MAX; height * width];
+        let mut corrupted = 0;
 
-        for (sec, line) in input.lines().enumerate() {
+        for (nanosec, line) in (1..).zip(input.lines()) {
             let Some((x, y)) = line.split_once(',') else {
                 return Err(ParseGridError);
             };
             let x: usize = x.parse().map_err(|_| ParseGridError)?;
             let y: usize = y.parse().map_err(|_| ParseGridError)?;
-            cells[(y * width) + x] = sec + 1;
+            cells[(y * width) + x] = nanosec;
+            corrupted = nanosec;
         }
 
         Ok(Self {
             height,
             width,
+            corrupted,
             cells,
         })
     }
@@ -150,10 +165,12 @@ pub fn part_one(input: &str) -> Option<usize> {
     Grid::from_input(input, 71, 71).map_or(None, |grid| grid.shortest_path_after(1024))
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<String> {
+    Grid::from_input(input, 71, 71).map_or(None, |grid| {
+        grid.first_coordinate_blocking_exit()
+            .map(|coords| format!("{},{}", coords.0, coords.1))
+    })
 }
 
 #[cfg(test)]
@@ -195,6 +212,7 @@ mod tests {
         Grid {
             height: 7,
             width: 7,
+            corrupted: 25,
             cells,
         }
     }
@@ -237,8 +255,10 @@ mod tests {
     }
 
     #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+    fn test_first_coordinate_blocking_exit() {
+        assert_eq!(
+            example_grid().first_coordinate_blocking_exit(),
+            Some((6, 1))
+        );
     }
 }
