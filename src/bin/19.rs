@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 advent_of_code::solution!(19);
@@ -30,6 +31,42 @@ impl Onsen {
             .filter(|pattern| self.is_pattern_possible(pattern))
             .count()
     }
+
+    fn ways_pattern_possible<'a>(
+        &self,
+        pattern: &'a str,
+        cache: &mut BTreeMap<&'a str, usize>,
+    ) -> usize {
+        if pattern.is_empty() {
+            return 1;
+        }
+        if let Some(value) = cache.get(pattern) {
+            return *value;
+        }
+        let value = self
+            .towels
+            .iter()
+            .map(|towel| {
+                if towel.len() > pattern.len() {
+                    0
+                } else if &pattern[..towel.len()] == towel {
+                    self.ways_pattern_possible(&pattern[towel.len()..], cache)
+                } else {
+                    0
+                }
+            })
+            .sum();
+        cache.insert(pattern, value);
+        value
+    }
+
+    fn total_ways_patterns_possible(&self) -> usize {
+        let mut cache = BTreeMap::new();
+        self.patterns
+            .iter()
+            .map(|pattern| self.ways_pattern_possible(pattern, &mut cache))
+            .sum()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -59,10 +96,9 @@ pub fn part_one(input: &str) -> Option<usize> {
     Onsen::from_str(input).map_or(None, |onsen| Some(onsen.possible_patterns()))
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    Onsen::from_str(input).map_or(None, |onsen| Some(onsen.total_ways_patterns_possible()))
 }
 
 #[cfg(test)]
@@ -123,8 +159,23 @@ mod tests {
     }
 
     #[test]
+    fn test_ways_patterns_possible() {
+        let onsen = example_onsen();
+        let mut cache = BTreeMap::new();
+
+        assert_eq!(onsen.ways_pattern_possible("brwrr", &mut cache), 2);
+        assert_eq!(onsen.ways_pattern_possible("bggr", &mut cache), 1);
+        assert_eq!(onsen.ways_pattern_possible("gbbr", &mut cache), 4);
+        assert_eq!(onsen.ways_pattern_possible("rrbgbr", &mut cache), 6);
+        assert_eq!(onsen.ways_pattern_possible("ubwu", &mut cache), 0);
+        assert_eq!(onsen.ways_pattern_possible("bwurrg", &mut cache), 1);
+        assert_eq!(onsen.ways_pattern_possible("brgr", &mut cache), 2);
+        assert_eq!(onsen.ways_pattern_possible("bbrgwb", &mut cache), 0);
+    }
+
+    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(16));
     }
 }
