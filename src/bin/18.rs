@@ -122,14 +122,27 @@ impl Grid {
     }
 
     fn first_coordinate_blocking_exit(&self) -> Option<(usize, usize)> {
-        let time = (1..=self.corrupted)
-            .find(|nanoseconds| self.shortest_path_after(*nanoseconds).is_none());
-        time.map(|t| {
-            let pos = self.cells.iter().position(|cell| *cell == t).unwrap_or(0);
-            let row = pos / self.width;
-            let col = pos % self.width;
-            (col, row)
-        })
+        // binary search
+        let mut lower = 0;
+        let mut upper = self.corrupted;
+
+        while lower < upper {
+            let mid = (lower + upper) / 2;
+            if self.shortest_path_after(mid).is_none() {
+                upper = mid;
+            } else {
+                lower = mid + 1;
+            }
+        }
+
+        self.cells
+            .iter()
+            .position(|cell| *cell == upper)
+            .map(|pos| {
+                let row = pos / self.width;
+                let col = pos % self.width;
+                (col, row)
+            })
     }
 }
 
