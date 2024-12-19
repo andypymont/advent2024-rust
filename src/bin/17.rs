@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::str::FromStr;
 
 advent_of_code::solution!(17);
@@ -8,15 +9,18 @@ const C: usize = 2;
 
 #[derive(Debug, PartialEq)]
 struct Program {
-    registers: [u32; 3],
-    instructions: Vec<u32>,
+    registers: [usize; 3],
+    instructions: Vec<usize>,
 }
 
 impl Program {
-    fn run(&self) -> Vec<u32> {
+    fn run(&self, substitute_a: Option<usize>) -> Vec<usize> {
         let mut output = Vec::new();
         let mut ip = 0;
         let mut registers = self.registers;
+        if let Some(a) = substitute_a {
+            registers[A] = a;
+        }
 
         loop {
             let Some(opcode) = self.instructions.get(ip) else {
@@ -37,7 +41,7 @@ impl Program {
                 0 | 6 | 7 => {
                     // ADV / BDV / CDV
                     let numerator = registers[A];
-                    let denominator = 2_u32.pow(combo);
+                    let denominator = combo.checked_sub(1).map_or(1, |c| 2 << c);
                     let target = match opcode {
                         0 => A,
                         6 => B,
@@ -70,10 +74,49 @@ impl Program {
                 _ => (),
             }
 
-            ip = adjust_ip.map_or(ip + 2, |ip| usize::try_from(ip).unwrap_or(0));
+            ip = adjust_ip.unwrap_or(ip + 2);
         }
 
         output
+    }
+
+    fn find_self_producing_program(&self) -> Option<usize> {
+        // The program in my input does this:
+        // loop {
+        //   b = a % 8;                 collect last 3 digits of a, store in b
+        //   b ^= 7;                    flip the 3 digits of b (in place)
+        //   c = a / 2.pow(b);          remove b digits from a, store in c
+        //   a = a / 8;                 remove 3 digits from a (in place)
+        //   b &= c;                    ???
+        //   b ^= 7;                    flip the 3 digits of b (in place)
+        //   output(b % 8);             output last 3 digits of b
+        //   if a == 0 { break; }       finish if a is now fully consumed
+        // }
+        //
+        // Therefore I want to construct a value in three-binary-digit blocks. Some values can
+        // affect subsequent ones, so need to consider multiple possibilities - therefore using
+        // BFS.
+
+        let mut queue = VecDeque::new();
+        queue.push_back((1, 0));
+
+        while let Some((output, a)) = queue.pop_front() {
+            if output <= self.instructions.len() {
+                (0..8).for_each(|candidate| {
+                    let candidate = (a << 3) + candidate;
+                    let result = self.run(Some(candidate));
+                    if let Some(result) = result.first() {
+                        if result == &self.instructions[self.instructions.len() - output] {
+                            queue.push_back((output + 1, candidate));
+                        }
+                    }
+                });
+            } else if self.run(Some(a)) == self.instructions {
+                return Some(a);
+            }
+        }
+
+        None
     }
 }
 
@@ -116,7 +159,7 @@ impl FromStr for Program {
 pub fn part_one(input: &str) -> Option<String> {
     Program::from_str(input).map_or(None, |program| {
         let mut output = String::new();
-        for out in program.run() {
+        for out in program.run(None) {
             if !output.is_empty() {
                 output.push(',');
             }
@@ -126,10 +169,9 @@ pub fn part_one(input: &str) -> Option<String> {
     })
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    Program::from_str(input).map_or(None, |program| program.find_self_producing_program())
 }
 
 #[cfg(test)]
@@ -157,13 +199,13 @@ mod tests {
             registers: [10, 0, 0],
             instructions: vec![5, 0, 5, 1, 5, 4],
         };
-        assert_eq!(program.run(), vec![0, 1, 2]);
+        assert_eq!(program.run(None), vec![0, 1, 2]);
 
         let program = Program {
             registers: [2024, 1, 2],
             instructions: vec![0, 1, 5, 4, 3, 0],
         };
-        assert_eq!(program.run(), vec![4, 2, 5, 6, 7, 7, 7, 7, 3, 1, 0]);
+        assert_eq!(program.run(None), vec![4, 2, 5, 6, 7, 7, 7, 7, 3, 1, 0]);
     }
 
     #[test]
@@ -171,11 +213,5 @@ mod tests {
         let input = advent_of_code::template::read_file("examples", DAY);
         let result = part_one(&input);
         assert_eq!(result, Some("4,6,3,5,6,3,5,2,1,0".to_string()));
-    }
-
-    #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
     }
 }
