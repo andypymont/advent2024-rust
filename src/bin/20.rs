@@ -93,7 +93,7 @@ impl Maze {
         distance
     }
 
-    fn find_cheats(&self, min_saving: usize) -> usize {
+    fn find_cheats(&self, max_cheat: usize, min_saving: usize) -> usize {
         let distance = self.distances_from_start();
         let mut count = 0;
         for (i, first) in distance.iter().enumerate() {
@@ -105,7 +105,7 @@ impl Maze {
                     continue;
                 };
                 let dist = taxicab_distance(i, j);
-                if dist > 2 {
+                if dist > max_cheat {
                     continue;
                 }
                 let (first, second) = if first > second {
@@ -161,13 +161,12 @@ impl FromStr for Maze {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Maze::from_str(input).map_or(None, |maze| Some(maze.find_cheats(100)))
+    Maze::from_str(input).map_or(None, |maze| Some(maze.find_cheats(2, 100)))
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    Maze::from_str(input).map_or(None, |maze| Some(maze.find_cheats(20, 100)))
 }
 
 #[cfg(test)]
@@ -300,9 +299,10 @@ mod tests {
     #[test]
     fn test_find_cheats() {
         let maze = example_maze();
-        assert_eq!(maze.find_cheats(2), 44);
-        assert_eq!(maze.find_cheats(3), 30);
-        assert_eq!(maze.find_cheats(64), 1);
+        assert_eq!(maze.find_cheats(2, 2), 44);
+        assert_eq!(maze.find_cheats(2, 3), 30);
+        assert_eq!(maze.find_cheats(2, 64), 1);
+        assert_eq!(maze.find_cheats(20, 76), 3);
     }
 
     #[test]
@@ -314,6 +314,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(0));
     }
 }
