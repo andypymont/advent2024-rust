@@ -1,66 +1,74 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
 use std::iter::successors;
 use std::str::FromStr;
 
 advent_of_code::solution!(22);
 
-const MIX: u64 = 16_777_216;
+const MIX: usize = 16_777_216;
 
 #[derive(Debug, PartialEq)]
 struct Buyer {
-    secret: u64,
+    secret: usize,
 }
 
 impl Buyer {
-    const fn next_secret_number(secret: u64) -> u64 {
+    const fn next_secret_number(secret: usize) -> usize {
         let secret = (secret ^ (secret * 64)) % MIX;
         let secret = (secret ^ (secret / 32)) % MIX;
         (secret ^ (secret * 2048)) % MIX
     }
 
-    fn prices(&self) -> impl Iterator<Item = u64> {
+    fn prices(&self) -> impl Iterator<Item = usize> {
         self.secret_numbers().map(|x| x % 10)
     }
 
-    fn secret_numbers(&self) -> impl Iterator<Item = u64> {
+    fn secret_numbers(&self) -> impl Iterator<Item = usize> {
         successors(Some(self.secret), |n| Some(Self::next_secret_number(*n))).take(2001)
     }
 }
 
-type PriceChange = (Ordering, u64);
-
 #[derive(Debug, PartialEq)]
 struct RecentPriceChanges {
-    a: Option<PriceChange>,
-    b: Option<PriceChange>,
-    c: Option<PriceChange>,
-    d: Option<PriceChange>,
+    prev: usize,
+    recent: [Option<usize>; 4],
+    seen: Vec<bool>,
 }
 
 impl RecentPriceChanges {
-    const fn new() -> Self {
+    fn new(prev: usize) -> Self {
         Self {
-            a: None,
-            b: None,
-            c: None,
-            d: None,
+            prev,
+            recent: [None; 4],
+            seen: vec![false; 19 * 19 * 19 * 19],
         }
     }
 
-    fn changes(&self) -> Option<(PriceChange, PriceChange, PriceChange, PriceChange)> {
-        let a = self.a?;
-        let b = self.b?;
-        let c = self.c?;
-        let d = self.d?;
-        Some((a, b, c, d))
+    fn changes(&self) -> Option<usize> {
+        let a = self.recent[0]?;
+        let b = self.recent[1]?;
+        let c = self.recent[2]?;
+        let d = self.recent[3]?;
+        Some((a * 19 * 19 * 19) + (b * 19 * 19) + (c * 19) + d)
     }
 
-    fn push(&mut self, change: PriceChange) {
-        self.a = self.b;
-        self.b = self.c;
-        self.c = self.d;
-        self.d = Some(change);
+    fn push(&mut self, price: usize) -> Option<usize> {
+        let change = match price.cmp(&self.prev) {
+            Ordering::Equal => 0,
+            Ordering::Less => price.abs_diff(self.prev),
+            Ordering::Greater => price.abs_diff(self.prev) + 9,
+        };
+
+        self.prev = price;
+        self.recent = [self.recent[1], self.recent[2], self.recent[3], Some(change)];
+
+        self.changes().and_then(|changes| {
+            if self.seen[changes] {
+                None
+            } else {
+                self.seen[changes] = true;
+                Some(changes)
+            }
+        })
     }
 }
 
@@ -70,33 +78,23 @@ struct Market {
 }
 
 impl Market {
-    fn most_bananas_buyable(&self) -> Option<u64> {
-        let mut bananas = BTreeMap::new();
+    fn most_bananas_buyable(&self) -> Option<usize> {
+        let mut bananas = vec![0; 19 * 19 * 19 * 19];
 
         for buyer in &self.buyers {
             let mut prices = buyer.prices();
-            let mut seen = BTreeSet::new();
-            let mut prev = prices.next().unwrap_or(0);
-            let mut recent = RecentPriceChanges::new();
+            let mut recent = RecentPriceChanges::new(prices.next().unwrap_or(0));
             for price in prices {
-                recent.push((price.cmp(&prev), price.abs_diff(prev)));
-                prev = price;
-
-                if let Some(changes) = recent.changes() {
-                    if seen.insert(changes) {
-                        bananas
-                            .entry(changes)
-                            .and_modify(|x| *x += price)
-                            .or_insert(price);
-                    }
+                if let Some(changes) = recent.push(price) {
+                    bananas[changes] += price;
                 }
             }
         }
 
-        bananas.values().max().copied()
+        bananas.into_iter().max()
     }
 
-    fn total_final_secret_numbers(&self) -> u64 {
+    fn total_final_secret_numbers(&self) -> usize {
         self.buyers
             .iter()
             .map(|buyer| buyer.secret_numbers().last().unwrap_or(0))
@@ -123,12 +121,12 @@ impl FromStr for Market {
 }
 
 #[must_use]
-pub fn part_one(input: &str) -> Option<u64> {
+pub fn part_one(input: &str) -> Option<usize> {
     Market::from_str(input).map_or(None, |market| Some(market.total_final_secret_numbers()))
 }
 
 #[must_use]
-pub fn part_two(input: &str) -> Option<u64> {
+pub fn part_two(input: &str) -> Option<usize> {
     Market::from_str(input).map_or(None, |market| market.most_bananas_buyable())
 }
 
