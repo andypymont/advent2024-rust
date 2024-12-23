@@ -28,6 +28,31 @@ impl ComputerSet {
             .enumerate()
             .filter_map(|(ix, present)| if *present { Some(ix) } else { None })
     }
+
+    fn len(&self) -> usize {
+        self.computers.iter().filter(|x| **x).count()
+    }
+
+    fn password_char(value: usize) -> char {
+        u32::try_from(value + 10)
+            .ok()
+            .and_then(|x| char::from_digit(x, 36))
+            .unwrap_or('!')
+    }
+
+    fn password(&self) -> String {
+        let mut password = String::new();
+
+        for computer in self.iter() {
+            if !password.is_empty() {
+                password.push(',');
+            }
+            password.push(Self::password_char(computer / 26));
+            password.push(Self::password_char(computer % 26));
+        }
+
+        password
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,6 +116,28 @@ impl Network {
             })
         })
     }
+
+    fn find_largest_group(&self) -> Option<ComputerSet> {
+        let mut groups = Vec::new();
+        for computer in self.computers.iter() {
+            let mut singleton = ComputerSet::new();
+            singleton.insert(computer);
+            groups.push(singleton);
+        }
+
+        for group in &mut groups {
+            for computer in self.computers.iter() {
+                if group
+                    .iter()
+                    .all(|other| self.connections.contains(computer, other))
+                {
+                    group.insert(computer);
+                }
+            }
+        }
+
+        groups.into_iter().max_by_key(ComputerSet::len)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -151,10 +198,12 @@ pub fn part_one(input: &str) -> Option<usize> {
     })
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<String> {
+    Network::from_str(input)
+        .ok()
+        .and_then(|network| network.find_largest_group())
+        .map(|g| g.password())
 }
 
 #[cfg(test)]
@@ -350,8 +399,43 @@ mod tests {
     }
 
     #[test]
+    fn test_password() {
+        let co = 66;
+        let de = 82;
+        let ka = 260;
+        let ta = 494;
+
+        let mut network = ComputerSet::new();
+        network.insert(ta);
+        assert_eq!(&network.password(), "ta");
+        network.insert(co);
+        assert_eq!(&network.password(), "co,ta");
+        network.insert(de);
+        network.insert(ka);
+        assert_eq!(&network.password(), "co,de,ka,ta");
+    }
+
+    #[test]
+    fn test_find_largest_group() {
+        let co = 66;
+        let de = 82;
+        let ka = 260;
+        let ta = 494;
+
+        let mut expected = ComputerSet::new();
+        expected.insert(co);
+        expected.insert(de);
+        expected.insert(ka);
+        expected.insert(ta);
+
+        let network = example_network();
+
+        assert_eq!(network.find_largest_group(), Some(expected));
+    }
+
+    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some("co,de,ka,ta".to_string()));
     }
 }
