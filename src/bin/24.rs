@@ -246,19 +246,25 @@ pub fn part_one(input: &str) -> Option<usize> {
 #[must_use]
 pub fn part_two(input: &str) -> Option<String> {
     System::from_str(input).ok().map(|system| {
-        let names: Vec<String> = system
+        let mut output = String::new();
+        for name in system
             .find_broken_nodes()
             .into_iter()
             .enumerate()
-            .filter_map(|(node, is_broken)| {
+            .filter_map(|(gate, is_broken)| {
                 if is_broken {
-                    Some(wire_name(node))
+                    Some(wire_name(gate))
                 } else {
                     None
                 }
             })
-            .collect();
-        names.join(",")
+        {
+            if !output.is_empty() {
+                output.push(',');
+            }
+            output.push_str(&name);
+        }
+        output
     })
 }
 
