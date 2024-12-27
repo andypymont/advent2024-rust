@@ -56,7 +56,73 @@ impl System {
             }
         }
 
-        self.result()
+        self.get_result()
+    }
+
+    fn count_edges(&self, source: usize) -> usize {
+        let mut connected = vec![false; 36 * 36 * 36];
+        for gate in &self.gates {
+            if gate.inputs[0] == source || gate.inputs[1] == source {
+                connected[gate.output] = true;
+            }
+        }
+        connected.into_iter().filter(|x| *x).count()
+    }
+
+    fn find_broken_nodes(&self) -> Vec<bool> {
+        // based on observing the output in graphviz, there are some common patterns which should
+        // be present, and we can find the exceptions to this
+        let mut broken_nodes = vec![false; 36 * 36 * 36];
+
+        for gate in &self.gates {
+            // z nodes must not be inputs of other nodes
+            if gate.inputs[0] / (36 * 36) == 35 {
+                broken_nodes[gate.inputs[0]] = true;
+            }
+            if gate.inputs[1] / (36 * 36) == 35 {
+                broken_nodes[gate.inputs[1]] = true;
+            }
+
+            let output_is_z = gate.output / (36 * 36) == 35;
+
+            // z nodes must be XOR, except for the last one, z45
+            if output_is_z && gate.output != 45509 && gate.operation != Operation::Xor {
+                broken_nodes[gate.output] = true;
+                continue;
+            }
+
+            // inputs of XOR nodes (except z nodes) must be x and y nodes
+            let first = gate.inputs[0] / (36 * 36);
+            let second = gate.inputs[1] / (36 * 36);
+            if gate.operation == Operation::Xor
+                && !output_is_z
+                && !((first == 33 && second == 34) || (first == 34 && second == 33))
+            {
+                broken_nodes[gate.output] = true;
+                continue;
+            }
+
+            let edges = self.count_edges(gate.output);
+
+            // XOR nodes (except z nodes) should always be the input of exactly two other nodes
+            if gate.operation == Operation::Xor && !output_is_z && edges != 2 {
+                broken_nodes[gate.output] = true;
+                continue;
+            }
+
+            // AND nodes should always be the input of exactly one other node, except the very
+            // first one wired to x00 and y00
+            if gate.operation == Operation::And
+                && !output_is_z
+                && !(gate.inputs == [42768, 44064] || gate.inputs == [44064, 42768])
+                && edges != 1
+            {
+                broken_nodes[gate.output] = true;
+                continue;
+            }
+        }
+
+        broken_nodes
     }
 
     fn get_result_digit(&self, digit: usize) -> usize {
@@ -66,7 +132,7 @@ impl System {
         usize::from(self.wires[key].unwrap_or(false))
     }
 
-    fn result(&self) -> usize {
+    fn get_result(&self) -> usize {
         (0..64)
             .map(|x| self.get_result_digit(x) << x)
             .fold(0, |a, b| a | b)
@@ -152,14 +218,49 @@ impl FromStr for System {
     }
 }
 
+fn wire_char(digit: usize) -> char {
+    let digit = digit.try_into().unwrap_or(36);
+    char::from_digit(digit, 36).unwrap_or('!')
+}
+
+fn wire_name(wire: usize) -> String {
+    let mut name = String::new();
+
+    let first = wire / (36 * 36);
+    let rest = wire % (36 * 36);
+    let second = rest / 36;
+    let third = rest % 36;
+
+    name.push(wire_char(first));
+    name.push(wire_char(second));
+    name.push(wire_char(third));
+
+    name
+}
+
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
     System::from_str(input).ok().map(System::calculate)
 }
 
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<String> {
+    System::from_str(input).ok().map(|system| {
+        let mut names: Vec<String> = system
+            .find_broken_nodes()
+            .into_iter()
+            .enumerate()
+            .filter_map(|(node, is_broken)| {
+                if is_broken {
+                    Some(wire_name(node))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        names.sort_unstable();
+        names.join(",")
+    })
 }
 
 #[cfg(test)]
@@ -375,11 +476,5 @@ mod tests {
     fn test_part_one() {
         let result = part_one(&advent_of_code::template::read_file("examples", DAY));
         assert_eq!(result, Some(2024));
-    }
-
-    #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
     }
 }
