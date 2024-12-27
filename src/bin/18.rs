@@ -175,12 +175,14 @@ impl Grid {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Grid::from_input(input, 71, 71).map_or(None, |grid| grid.shortest_path_after(1024))
+    Grid::from_input(input, 71, 71)
+        .ok()
+        .and_then(|grid| grid.shortest_path_after(1024))
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<String> {
-    Grid::from_input(input, 71, 71).map_or(None, |grid| {
+    Grid::from_input(input, 71, 71).ok().and_then(|grid| {
         grid.first_coordinate_blocking_exit()
             .map(|coords| format!("{},{}", coords.0, coords.1))
     })

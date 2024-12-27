@@ -167,12 +167,16 @@ impl FromStr for TrailMap {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    TrailMap::from_str(input).map_or(None, |trail_map| Some(trail_map.total_trail_head_score()))
+    TrailMap::from_str(input)
+        .ok()
+        .map(TrailMap::total_trail_head_score)
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    TrailMap::from_str(input).map_or(None, |trail_map| Some(trail_map.total_trail_head_rating()))
+    TrailMap::from_str(input)
+        .ok()
+        .map(TrailMap::total_trail_head_rating)
 }
 
 #[cfg(test)]

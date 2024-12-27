@@ -146,34 +146,30 @@ impl FromStr for PuzzleInput {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    PuzzleInput::from_str(input).map_or(None, |input| {
-        Some(
-            input
-                .updates
-                .iter()
-                .map(|update| {
-                    if input.rules.in_correct_order(update) {
-                        update[update.len() / 2]
-                    } else {
-                        0
-                    }
-                })
-                .sum(),
-        )
+    PuzzleInput::from_str(input).ok().map(|input| {
+        input
+            .updates
+            .iter()
+            .map(|update| {
+                if input.rules.in_correct_order(update) {
+                    update[update.len() / 2]
+                } else {
+                    0
+                }
+            })
+            .sum()
     })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    PuzzleInput::from_str(input).map_or(None, |input| {
-        Some(
-            input
-                .updates
-                .iter()
-                .filter_map(|update| input.rules.corrected_order(update))
-                .map(|update| update[update.len() / 2])
-                .sum(),
-        )
+    PuzzleInput::from_str(input).ok().map(|input| {
+        input
+            .updates
+            .iter()
+            .filter_map(|update| input.rules.corrected_order(update))
+            .map(|update| update[update.len() / 2])
+            .sum()
     })
 }
 

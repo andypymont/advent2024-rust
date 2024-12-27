@@ -144,12 +144,14 @@ impl FromStr for WordSearch {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
-    WordSearch::from_str(input).map_or(None, |ws| Some(ws.xmas_count()))
+    WordSearch::from_str(input).ok().map(|ws| ws.xmas_count())
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
-    WordSearch::from_str(input).map_or(None, |ws| Some(ws.cross_mas_count()))
+    WordSearch::from_str(input)
+        .ok()
+        .map(|ws| ws.cross_mas_count())
 }
 
 #[cfg(test)]

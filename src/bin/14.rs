@@ -130,16 +130,18 @@ fn parse_robots(input: &str) -> Result<Vec<Robot>, ParseRobotError> {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
-    parse_robots(input).map_or(None, |robots| {
+    parse_robots(input).ok().map(|robots| {
         let (a, b, c, d) = robots_in_quadrants_after(&robots, 100, 101, 103);
-        Some(a * b * c * d)
+        a * b * c * d
     })
 }
 
 #[allow(clippy::missing_const_for_fn)]
 #[must_use]
 pub fn part_two(input: &str) -> Option<i32> {
-    parse_robots(input).map_or(None, |robots| Some(find_drawing(&robots, 101, 103)))
+    parse_robots(input)
+        .ok()
+        .map(|robots| find_drawing(&robots, 101, 103))
 }
 
 #[cfg(test)]

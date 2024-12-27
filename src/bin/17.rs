@@ -157,7 +157,7 @@ impl FromStr for Program {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<String> {
-    Program::from_str(input).map_or(None, |program| {
+    Program::from_str(input).ok().map(|program| {
         let mut output = String::new();
         for out in program.run(None) {
             if !output.is_empty() {
@@ -165,13 +165,15 @@ pub fn part_one(input: &str) -> Option<String> {
             }
             output.push_str(&out.to_string());
         }
-        Some(output)
+        output
     })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    Program::from_str(input).map_or(None, |program| program.find_self_producing_program())
+    Program::from_str(input)
+        .ok()
+        .and_then(|program| program.find_self_producing_program())
 }
 
 #[cfg(test)]

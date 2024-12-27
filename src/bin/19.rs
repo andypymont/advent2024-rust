@@ -93,12 +93,16 @@ impl FromStr for Onsen {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Onsen::from_str(input).map_or(None, |onsen| Some(onsen.possible_patterns()))
+    Onsen::from_str(input)
+        .ok()
+        .map(|onsen| onsen.possible_patterns())
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    Onsen::from_str(input).map_or(None, |onsen| Some(onsen.total_ways_patterns_possible()))
+    Onsen::from_str(input)
+        .ok()
+        .map(|onsen| onsen.total_ways_patterns_possible())
 }
 
 #[cfg(test)]

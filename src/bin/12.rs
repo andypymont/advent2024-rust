@@ -165,25 +165,21 @@ impl FromStr for Farm {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Farm::from_str(input).map_or(None, |farm| {
-        Some(
-            farm.find_regions()
-                .iter()
-                .map(|r| r.area * r.sides.len())
-                .sum(),
-        )
+    Farm::from_str(input).ok().map(|farm| {
+        farm.find_regions()
+            .iter()
+            .map(|r| r.area * r.sides.len())
+            .sum()
     })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    Farm::from_str(input).map_or(None, |farm| {
-        Some(
-            farm.find_regions()
-                .iter()
-                .map(|r| r.area * r.distinct_sides())
-                .sum(),
-        )
+    Farm::from_str(input).ok().map(|farm| {
+        farm.find_regions()
+            .iter()
+            .map(|r| r.area * r.distinct_sides())
+            .sum()
     })
 }
 

@@ -178,22 +178,20 @@ impl FromStr for PatrolArea {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
-    PatrolArea::from_str(input).map_or(None, |area| {
-        Some(area.patrol_visits().into_iter().map(u32::from).sum())
-    })
+    PatrolArea::from_str(input)
+        .ok()
+        .map(|area| area.patrol_visits().into_iter().map(u32::from).sum())
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    PatrolArea::from_str(input).map_or(None, |area| {
-        Some(
-            area.patrol_visits()
-                .iter()
-                .enumerate()
-                .filter_map(|(pos, route)| if *route { Some(pos) } else { None })
-                .filter(|pos| area.patrol_loops(*pos))
-                .count(),
-        )
+    PatrolArea::from_str(input).ok().map(|area| {
+        area.patrol_visits()
+            .iter()
+            .enumerate()
+            .filter_map(|(pos, route)| if *route { Some(pos) } else { None })
+            .filter(|pos| area.patrol_loops(*pos))
+            .count()
     })
 }
 

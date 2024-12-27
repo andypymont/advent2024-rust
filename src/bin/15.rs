@@ -250,27 +250,23 @@ impl Warehouse {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Warehouse::from_input(input, false).map_or(None, |warehouse| {
-        Some(
-            warehouse
-                .execute_instructions()
-                .iter()
-                .map(WarehouseBox::gps_coordinate)
-                .sum(),
-        )
+    Warehouse::from_input(input, false).ok().map(|warehouse| {
+        warehouse
+            .execute_instructions()
+            .iter()
+            .map(WarehouseBox::gps_coordinate)
+            .sum()
     })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    Warehouse::from_input(input, true).map_or(None, |warehouse| {
-        Some(
-            warehouse
-                .execute_instructions()
-                .iter()
-                .map(WarehouseBox::gps_coordinate)
-                .sum(),
-        )
+    Warehouse::from_input(input, true).ok().map(|warehouse| {
+        warehouse
+            .execute_instructions()
+            .iter()
+            .map(WarehouseBox::gps_coordinate)
+            .sum()
     })
 }
 

@@ -329,12 +329,14 @@ impl FromStr for Maze {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u32> {
-    Maze::from_str(input).map_or(None, |maze| maze.best_path())
+    Maze::from_str(input).ok().and_then(|maze| maze.best_path())
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u32> {
-    Maze::from_str(input).map_or(None, |maze| Some(maze.spaces_in_best_paths()))
+    Maze::from_str(input)
+        .ok()
+        .map(|maze| maze.spaces_in_best_paths())
 }
 
 #[cfg(test)]

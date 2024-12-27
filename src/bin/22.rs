@@ -122,12 +122,16 @@ impl FromStr for Market {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Market::from_str(input).map_or(None, |market| Some(market.total_final_secret_numbers()))
+    Market::from_str(input)
+        .ok()
+        .map(|market| market.total_final_secret_numbers())
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    Market::from_str(input).map_or(None, |market| market.most_bananas_buyable())
+    Market::from_str(input)
+        .ok()
+        .and_then(|market| market.most_bananas_buyable())
 }
 
 #[cfg(test)]

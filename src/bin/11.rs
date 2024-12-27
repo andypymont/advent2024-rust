@@ -107,21 +107,21 @@ impl FromStr for StoneLine {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<u64> {
-    StoneLine::from_str(input).map_or(None, |mut stones| {
+    StoneLine::from_str(input).ok().map(|mut stones| {
         for _ in 0..25 {
             stones = stones.blink();
         }
-        Some(stones.len())
+        stones.len()
     })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<u64> {
-    StoneLine::from_str(input).map_or(None, |mut stones| {
+    StoneLine::from_str(input).ok().map(|mut stones| {
         for _ in 0..75 {
             stones = stones.blink();
         }
-        Some(stones.len())
+        stones.len()
     })
 }
 

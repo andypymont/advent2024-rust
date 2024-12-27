@@ -226,12 +226,16 @@ impl FromStr for DiskMap {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    DiskMap::from_str(input).map_or(None, |dm| Some(dm.defragged_checksum()))
+    DiskMap::from_str(input)
+        .ok()
+        .map(DiskMap::defragged_checksum)
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    DiskMap::from_str(input).map_or(None, |dm| Some(dm.defragged_whole_files_checksum()))
+    DiskMap::from_str(input)
+        .ok()
+        .map(|dm| dm.defragged_whole_files_checksum())
 }
 
 #[cfg(test)]

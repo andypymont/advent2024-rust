@@ -161,12 +161,16 @@ impl FromStr for Maze {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Maze::from_str(input).map_or(None, |maze| Some(maze.find_cheats(2, 100)))
+    Maze::from_str(input)
+        .ok()
+        .map(|maze| maze.find_cheats(2, 100))
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    Maze::from_str(input).map_or(None, |maze| Some(maze.find_cheats(20, 100)))
+    Maze::from_str(input)
+        .ok()
+        .map(|maze| maze.find_cheats(20, 100))
 }
 
 #[cfg(test)]

@@ -90,27 +90,23 @@ impl FromStr for LevelReport {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    LevelReport::from_str(input).map_or(None, |report| {
-        Some(
-            report
-                .lines
-                .iter()
-                .filter(|line| line.is_safe_default())
-                .count(),
-        )
+    LevelReport::from_str(input).ok().map(|report| {
+        report
+            .lines
+            .iter()
+            .filter(|line| line.is_safe_default())
+            .count()
     })
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    LevelReport::from_str(input).map_or(None, |report| {
-        Some(
-            report
-                .lines
-                .iter()
-                .filter(|line| line.is_safe_tolerating())
-                .count(),
-        )
+    LevelReport::from_str(input).ok().map(|report| {
+        report
+            .lines
+            .iter()
+            .filter(|line| line.is_safe_tolerating())
+            .count()
     })
 }
 

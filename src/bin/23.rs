@@ -188,13 +188,11 @@ impl FromStr for Network {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    Network::from_str(input).map_or(None, |network| {
-        Some(
-            network
-                .connected_trios()
-                .filter(|trio| trio.iter().any(|computer| computer / 26 == 19))
-                .count(),
-        )
+    Network::from_str(input).ok().map(|network| {
+        network
+            .connected_trios()
+            .filter(|trio| trio.iter().any(|computer| computer / 26 == 19))
+            .count()
     })
 }
 

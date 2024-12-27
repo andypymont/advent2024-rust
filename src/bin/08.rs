@@ -162,12 +162,16 @@ impl FromStr for City {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
-    City::from_str(input).map_or(None, |city| Some(city.antinode_count(false)))
+    City::from_str(input)
+        .ok()
+        .map(|city| city.antinode_count(false))
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<usize> {
-    City::from_str(input).map_or(None, |city| Some(city.antinode_count(true)))
+    City::from_str(input)
+        .ok()
+        .map(|city| city.antinode_count(true))
 }
 
 #[cfg(test)]

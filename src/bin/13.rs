@@ -100,12 +100,16 @@ impl FromStr for Arcade {
 
 #[must_use]
 pub fn part_one(input: &str) -> Option<i64> {
-    Arcade::from_str(input).map_or(None, |arcade| Some(arcade.win_all_prizes()))
+    Arcade::from_str(input)
+        .ok()
+        .map(|arcade| arcade.win_all_prizes())
 }
 
 #[must_use]
 pub fn part_two(input: &str) -> Option<i64> {
-    Arcade::from_str(input).map_or(None, |arcade| Some(arcade.distant().win_all_prizes()))
+    Arcade::from_str(input)
+        .ok()
+        .map(|arcade| arcade.distant().win_all_prizes())
 }
 
 #[cfg(test)]
