@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::str::FromStr;
 
 advent_of_code::solution!(21);
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum CodeKey {
     Zero,
     One,
@@ -25,7 +25,7 @@ struct Code {
     keys: Vec<CodeKey>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum DirectionKey {
     Up,
     Right,
@@ -34,7 +34,7 @@ enum DirectionKey {
     A,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct DirectionSequence {
     length: usize,
     sequence: u64,
@@ -183,14 +183,18 @@ impl Key for DirectionKey {
 
 struct DirectionPadStack {
     height: usize,
+    cache: BTreeMap<(usize, DirectionSequence), usize>,
 }
 
 impl DirectionPadStack {
     const fn new(height: usize) -> Self {
-        Self { height }
+        Self {
+            height,
+            cache: BTreeMap::new(),
+        }
     }
 
-    fn shortest_path_for_code(&self, code: &Code) -> usize {
+    fn shortest_path_for_code(&mut self, code: &Code) -> usize {
         let mut total = 0;
 
         for (ix, second) in code.keys.iter().enumerate() {
@@ -210,8 +214,11 @@ impl DirectionPadStack {
         total
     }
 
-    #[allow(clippy::only_used_in_recursion)]
-    fn shortest_path_stacked(&self, level: usize, path: &DirectionSequence) -> usize {
+    fn shortest_path_stacked(&mut self, level: usize, path: &DirectionSequence) -> usize {
+        if let Some(length) = self.cache.get(&(level, path.clone())) {
+            return *length;
+        }
+
         let mut length = 0;
         let mut first = DirectionKey::A;
 
@@ -229,6 +236,7 @@ impl DirectionPadStack {
             first = second;
         }
 
+        self.cache.insert((level, path.clone()), length);
         length
     }
 }
@@ -293,7 +301,7 @@ impl Code {
 #[must_use]
 pub fn part_one(input: &str) -> Option<usize> {
     Code::vec_from_str(input).ok().map(|codes| {
-        let dpad = DirectionPadStack::new(2);
+        let mut dpad = DirectionPadStack::new(2);
         codes
             .iter()
             .map(|code| dpad.shortest_path_for_code(code) * code.number)
@@ -301,10 +309,15 @@ pub fn part_one(input: &str) -> Option<usize> {
     })
 }
 
-#[allow(clippy::missing_const_for_fn)]
 #[must_use]
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    Code::vec_from_str(input).ok().map(|codes| {
+        let mut dpad = DirectionPadStack::new(25);
+        codes
+            .iter()
+            .map(|code| dpad.shortest_path_for_code(code) * code.number)
+            .sum()
+    })
 }
 
 #[cfg(test)]
@@ -402,7 +415,7 @@ mod tests {
     #[test]
     fn test_directionpadstack_shortest_path_for_code() {
         let codes = example_codes();
-        let dpad = DirectionPadStack::new(2);
+        let mut dpad = DirectionPadStack::new(2);
         assert_eq!(dpad.shortest_path_for_code(&codes[0]), 68);
         assert_eq!(dpad.shortest_path_for_code(&codes[1]), 60);
         assert_eq!(dpad.shortest_path_for_code(&codes[2]), 68);
@@ -419,6 +432,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(154_115_708_116_294));
     }
 }
