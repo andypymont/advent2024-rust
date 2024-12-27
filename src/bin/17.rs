@@ -41,7 +41,7 @@ impl Program {
                 0 | 6 | 7 => {
                     // ADV / BDV / CDV
                     let numerator = registers[A];
-                    let denominator = combo.checked_sub(1).map_or(1, |c| 2 << c);
+                    let denominator = 1 << combo;
                     let target = match opcode {
                         0 => A,
                         6 => B,
