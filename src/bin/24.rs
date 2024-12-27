@@ -246,7 +246,7 @@ pub fn part_one(input: &str) -> Option<usize> {
 #[must_use]
 pub fn part_two(input: &str) -> Option<String> {
     System::from_str(input).ok().map(|system| {
-        let mut names: Vec<String> = system
+        let names: Vec<String> = system
             .find_broken_nodes()
             .into_iter()
             .enumerate()
@@ -258,7 +258,6 @@ pub fn part_two(input: &str) -> Option<String> {
                 }
             })
             .collect();
-        names.sort_unstable();
         names.join(",")
     })
 }
