@@ -33,7 +33,7 @@ struct System {
 }
 
 impl System {
-    fn calculate(mut self) -> u32 {
+    fn calculate(mut self) -> usize {
         loop {
             let mut changed = false;
 
@@ -59,15 +59,17 @@ impl System {
         self.result()
     }
 
-    fn get_result_digit(&self, digit: usize) -> u32 {
+    fn get_result_digit(&self, digit: usize) -> usize {
         let tens = digit / 10;
         let ones = digit % 10;
         let key = (35 * 36 * 36) + (tens * 36) + ones;
-        u32::from(self.wires[key].unwrap_or(false))
+        usize::from(self.wires[key].unwrap_or(false))
     }
 
-    fn result(&self) -> u32 {
-        (0..32).map(|x| self.get_result_digit(x) << x).sum()
+    fn result(&self) -> usize {
+        (0..64)
+            .map(|x| self.get_result_digit(x) << x)
+            .fold(0, |a, b| a | b)
     }
 }
 
@@ -151,7 +153,7 @@ impl FromStr for System {
 }
 
 #[must_use]
-pub fn part_one(input: &str) -> Option<u32> {
+pub fn part_one(input: &str) -> Option<usize> {
     System::from_str(input).ok().map(System::calculate)
 }
 
